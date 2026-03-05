@@ -1,0 +1,24 @@
+[4.045s] Invoking command in '/home/aaltindas/DEOS/deos_ws/src/sensors/lidar': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PS1=(deos_env) \[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ PYTHONPATH=/home/aaltindas/DEOS/deos_ws/build/lidar/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/aaltindas/DEOS/deos_ws/install/lidar/lib/python3.12/site-packages:${PYTHONPATH} VIRTUAL_ENV_PROMPT=(deos_env) /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../build/lidar build --build-base /home/aaltindas/DEOS/deos_ws/build/lidar/build install --record /home/aaltindas/DEOS/deos_ws/build/lidar/install.log --single-version-externally-managed install_data
+[4.811s] running egg_info
+[4.811s] creating ../../../build/lidar/lidar.egg-info
+[4.851s] writing ../../../build/lidar/lidar.egg-info/PKG-INFO
+[4.851s] writing dependency_links to ../../../build/lidar/lidar.egg-info/dependency_links.txt
+[4.851s] writing requirements to ../../../build/lidar/lidar.egg-info/requires.txt
+[4.852s] writing top-level names to ../../../build/lidar/lidar.egg-info/top_level.txt
+[4.852s] writing manifest file '../../../build/lidar/lidar.egg-info/SOURCES.txt'
+[4.898s] reading manifest file '../../../build/lidar/lidar.egg-info/SOURCES.txt'
+[4.899s] writing manifest file '../../../build/lidar/lidar.egg-info/SOURCES.txt'
+[4.900s] running build
+[4.900s] running install
+[4.915s] running install_data
+[4.915s] creating /home/aaltindas/DEOS/deos_ws/install/lidar/share/ament_index
+[4.915s] creating /home/aaltindas/DEOS/deos_ws/install/lidar/share/ament_index/resource_index
+[4.915s] creating /home/aaltindas/DEOS/deos_ws/install/lidar/share/ament_index/resource_index/packages
+[4.915s] copying resource/lidar -> /home/aaltindas/DEOS/deos_ws/install/lidar/share/ament_index/resource_index/packages
+[4.916s] copying package.xml -> /home/aaltindas/DEOS/deos_ws/install/lidar/share/lidar
+[4.916s] creating /home/aaltindas/DEOS/deos_ws/install/lidar/share/lidar/launch
+[4.916s] running install_egg_info
+[5.012s] Copying ../../../build/lidar/lidar.egg-info to /home/aaltindas/DEOS/deos_ws/install/lidar/lib/python3.12/site-packages/lidar-0.0.0-py3.12.egg-info
+[5.013s] running install_scripts
+[5.334s] writing list of installed files to '/home/aaltindas/DEOS/deos_ws/build/lidar/install.log'
+[5.508s] Invoked command in '/home/aaltindas/DEOS/deos_ws/src/sensors/lidar' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PS1=(deos_env) \[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ PYTHONPATH=/home/aaltindas/DEOS/deos_ws/build/lidar/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/aaltindas/DEOS/deos_ws/install/lidar/lib/python3.12/site-packages:${PYTHONPATH} VIRTUAL_ENV_PROMPT=(deos_env) /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../build/lidar build --build-base /home/aaltindas/DEOS/deos_ws/build/lidar/build install --record /home/aaltindas/DEOS/deos_ws/build/lidar/install.log --single-version-externally-managed install_data

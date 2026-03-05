@@ -1,0 +1,33 @@
+running egg_info
+creating ../../build/vehicle_bringup/vehicle_bringup.egg-info
+writing ../../build/vehicle_bringup/vehicle_bringup.egg-info/PKG-INFO
+writing dependency_links to ../../build/vehicle_bringup/vehicle_bringup.egg-info/dependency_links.txt
+writing requirements to ../../build/vehicle_bringup/vehicle_bringup.egg-info/requires.txt
+writing top-level names to ../../build/vehicle_bringup/vehicle_bringup.egg-info/top_level.txt
+writing manifest file '../../build/vehicle_bringup/vehicle_bringup.egg-info/SOURCES.txt'
+reading manifest file '../../build/vehicle_bringup/vehicle_bringup.egg-info/SOURCES.txt'
+writing manifest file '../../build/vehicle_bringup/vehicle_bringup.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/aaltindas/DEOS/deos_ws/build/vehicle_bringup/build
+creating /home/aaltindas/DEOS/deos_ws/build/vehicle_bringup/build/lib
+creating /home/aaltindas/DEOS/deos_ws/build/vehicle_bringup/build/lib/vehicle_bringup
+copying vehicle_bringup/__init__.py -> /home/aaltindas/DEOS/deos_ws/build/vehicle_bringup/build/lib/vehicle_bringup
+running install
+running install_lib
+creating /home/aaltindas/DEOS/deos_ws/install/vehicle_bringup/lib/python3.12/site-packages/vehicle_bringup
+copying /home/aaltindas/DEOS/deos_ws/build/vehicle_bringup/build/lib/vehicle_bringup/__init__.py -> /home/aaltindas/DEOS/deos_ws/install/vehicle_bringup/lib/python3.12/site-packages/vehicle_bringup
+byte-compiling /home/aaltindas/DEOS/deos_ws/install/vehicle_bringup/lib/python3.12/site-packages/vehicle_bringup/__init__.py to __init__.cpython-312.pyc
+running install_data
+creating /home/aaltindas/DEOS/deos_ws/install/vehicle_bringup/share/ament_index
+creating /home/aaltindas/DEOS/deos_ws/install/vehicle_bringup/share/ament_index/resource_index
+creating /home/aaltindas/DEOS/deos_ws/install/vehicle_bringup/share/ament_index/resource_index/packages
+copying resource/vehicle_bringup -> /home/aaltindas/DEOS/deos_ws/install/vehicle_bringup/share/ament_index/resource_index/packages
+copying package.xml -> /home/aaltindas/DEOS/deos_ws/install/vehicle_bringup/share/vehicle_bringup
+creating /home/aaltindas/DEOS/deos_ws/install/vehicle_bringup/share/vehicle_bringup/launch
+copying launch/sensorlocs.launch.py -> /home/aaltindas/DEOS/deos_ws/install/vehicle_bringup/share/vehicle_bringup/launch
+copying launch/main.launch.py -> /home/aaltindas/DEOS/deos_ws/install/vehicle_bringup/share/vehicle_bringup/launch
+running install_egg_info
+Copying ../../build/vehicle_bringup/vehicle_bringup.egg-info to /home/aaltindas/DEOS/deos_ws/install/vehicle_bringup/lib/python3.12/site-packages/vehicle_bringup-0.1.0-py3.12.egg-info
+running install_scripts
+writing list of installed files to '/home/aaltindas/DEOS/deos_ws/build/vehicle_bringup/install.log'

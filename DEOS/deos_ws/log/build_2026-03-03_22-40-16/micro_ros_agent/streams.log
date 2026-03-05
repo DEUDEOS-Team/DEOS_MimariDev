@@ -1,0 +1,19 @@
+[2.634s] Invoking command in '/home/aaltindas/DEOS/deos_ws/src/control/micro_ros_agent': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PS1=(deos_env) \[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ PYTHONPATH=/home/aaltindas/DEOS/deos_ws/build/micro_ros_agent/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/aaltindas/DEOS/deos_ws/install/micro_ros_agent/lib/python3.12/site-packages:${PYTHONPATH} VIRTUAL_ENV_PROMPT=(deos_env) /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../build/micro_ros_agent build --build-base /home/aaltindas/DEOS/deos_ws/build/micro_ros_agent/build install --record /home/aaltindas/DEOS/deos_ws/build/micro_ros_agent/install.log --single-version-externally-managed install_data
+[3.339s] running egg_info
+[3.404s] writing ../../../build/micro_ros_agent/micro_ros_agent.egg-info/PKG-INFO
+[3.407s] writing dependency_links to ../../../build/micro_ros_agent/micro_ros_agent.egg-info/dependency_links.txt
+[3.411s] writing requirements to ../../../build/micro_ros_agent/micro_ros_agent.egg-info/requires.txt
+[3.415s] writing top-level names to ../../../build/micro_ros_agent/micro_ros_agent.egg-info/top_level.txt
+[3.527s] reading manifest file '../../../build/micro_ros_agent/micro_ros_agent.egg-info/SOURCES.txt'
+[3.533s] writing manifest file '../../../build/micro_ros_agent/micro_ros_agent.egg-info/SOURCES.txt'
+[3.534s] running build
+[3.534s] running build_py
+[3.535s] running install
+[3.548s] running install_lib
+[3.599s] running install_data
+[3.601s] running install_egg_info
+[3.643s] removing '/home/aaltindas/DEOS/deos_ws/install/micro_ros_agent/lib/python3.12/site-packages/micro_ros_agent-0.0.0-py3.12.egg-info' (and everything under it)
+[3.645s] Copying ../../../build/micro_ros_agent/micro_ros_agent.egg-info to /home/aaltindas/DEOS/deos_ws/install/micro_ros_agent/lib/python3.12/site-packages/micro_ros_agent-0.0.0-py3.12.egg-info
+[3.647s] running install_scripts
+[4.255s] writing list of installed files to '/home/aaltindas/DEOS/deos_ws/build/micro_ros_agent/install.log'
+[4.496s] Invoked command in '/home/aaltindas/DEOS/deos_ws/src/control/micro_ros_agent' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PS1=(deos_env) \[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ PYTHONPATH=/home/aaltindas/DEOS/deos_ws/build/micro_ros_agent/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/aaltindas/DEOS/deos_ws/install/micro_ros_agent/lib/python3.12/site-packages:${PYTHONPATH} VIRTUAL_ENV_PROMPT=(deos_env) /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../build/micro_ros_agent build --build-base /home/aaltindas/DEOS/deos_ws/build/micro_ros_agent/build install --record /home/aaltindas/DEOS/deos_ws/build/micro_ros_agent/install.log --single-version-externally-managed install_data

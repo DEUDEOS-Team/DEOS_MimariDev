@@ -1,0 +1,21 @@
+[2.560s] Invoking command in '/home/aaltindas/DEOS/deos_ws/src/perception/obstacle_detection/vision_bridge': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PS1=(deos_env) \[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ PYTHONPATH=/home/aaltindas/DEOS/deos_ws/build/vision_bridge/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/aaltindas/DEOS/deos_ws/install/vision_bridge/lib/python3.12/site-packages:${PYTHONPATH} VIRTUAL_ENV_PROMPT=(deos_env) /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../../build/vision_bridge build --build-base /home/aaltindas/DEOS/deos_ws/build/vision_bridge/build install --record /home/aaltindas/DEOS/deos_ws/build/vision_bridge/install.log --single-version-externally-managed install_data
+[3.076s] running egg_info
+[3.116s] writing ../../../../build/vision_bridge/vision_bridge.egg-info/PKG-INFO
+[3.116s] writing dependency_links to ../../../../build/vision_bridge/vision_bridge.egg-info/dependency_links.txt
+[3.118s] writing entry points to ../../../../build/vision_bridge/vision_bridge.egg-info/entry_points.txt
+[3.118s] writing requirements to ../../../../build/vision_bridge/vision_bridge.egg-info/requires.txt
+[3.118s] writing top-level names to ../../../../build/vision_bridge/vision_bridge.egg-info/top_level.txt
+[3.204s] reading manifest file '../../../../build/vision_bridge/vision_bridge.egg-info/SOURCES.txt'
+[3.204s] writing manifest file '../../../../build/vision_bridge/vision_bridge.egg-info/SOURCES.txt'
+[3.205s] running build
+[3.205s] running build_py
+[3.205s] running install
+[3.218s] running install_lib
+[3.254s] running install_data
+[3.254s] running install_egg_info
+[3.290s] removing '/home/aaltindas/DEOS/deos_ws/install/vision_bridge/lib/python3.12/site-packages/vision_bridge-0.0.0-py3.12.egg-info' (and everything under it)
+[3.290s] Copying ../../../../build/vision_bridge/vision_bridge.egg-info to /home/aaltindas/DEOS/deos_ws/install/vision_bridge/lib/python3.12/site-packages/vision_bridge-0.0.0-py3.12.egg-info
+[3.293s] running install_scripts
+[3.544s] Installing vision_bridge_node script to /home/aaltindas/DEOS/deos_ws/install/vision_bridge/lib/vision_bridge
+[3.545s] writing list of installed files to '/home/aaltindas/DEOS/deos_ws/build/vision_bridge/install.log'
+[3.671s] Invoked command in '/home/aaltindas/DEOS/deos_ws/src/perception/obstacle_detection/vision_bridge' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PS1=(deos_env) \[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ PYTHONPATH=/home/aaltindas/DEOS/deos_ws/build/vision_bridge/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/aaltindas/DEOS/deos_ws/install/vision_bridge/lib/python3.12/site-packages:${PYTHONPATH} VIRTUAL_ENV_PROMPT=(deos_env) /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../../build/vision_bridge build --build-base /home/aaltindas/DEOS/deos_ws/build/vision_bridge/build install --record /home/aaltindas/DEOS/deos_ws/build/vision_bridge/install.log --single-version-externally-managed install_data

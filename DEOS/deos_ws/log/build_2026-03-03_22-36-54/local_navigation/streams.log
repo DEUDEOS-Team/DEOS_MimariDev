@@ -1,0 +1,32 @@
+[2.635s] Invoking command in '/home/aaltindas/DEOS/deos_ws/src/planning/local_navigation': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PS1=(deos_env) \[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ PYTHONPATH=/home/aaltindas/DEOS/deos_ws/build/local_navigation/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/aaltindas/DEOS/deos_ws/install/local_navigation/lib/python3.12/site-packages:${PYTHONPATH} VIRTUAL_ENV_PROMPT=(deos_env) /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../build/local_navigation build --build-base /home/aaltindas/DEOS/deos_ws/build/local_navigation/build install --record /home/aaltindas/DEOS/deos_ws/build/local_navigation/install.log --single-version-externally-managed install_data
+[3.386s] running egg_info
+[3.387s] creating ../../../build/local_navigation/local_navigation.egg-info
+[3.445s] writing ../../../build/local_navigation/local_navigation.egg-info/PKG-INFO
+[3.445s] writing dependency_links to ../../../build/local_navigation/local_navigation.egg-info/dependency_links.txt
+[3.446s] writing requirements to ../../../build/local_navigation/local_navigation.egg-info/requires.txt
+[3.446s] writing top-level names to ../../../build/local_navigation/local_navigation.egg-info/top_level.txt
+[3.446s] writing manifest file '../../../build/local_navigation/local_navigation.egg-info/SOURCES.txt'
+[3.570s] reading manifest file '../../../build/local_navigation/local_navigation.egg-info/SOURCES.txt'
+[3.572s] writing manifest file '../../../build/local_navigation/local_navigation.egg-info/SOURCES.txt'
+[3.572s] running build
+[3.572s] running build_py
+[3.572s] creating /home/aaltindas/DEOS/deos_ws/build/local_navigation/build
+[3.572s] creating /home/aaltindas/DEOS/deos_ws/build/local_navigation/build/lib
+[3.573s] creating /home/aaltindas/DEOS/deos_ws/build/local_navigation/build/lib/local_navigation
+[3.573s] copying local_navigation/__init__.py -> /home/aaltindas/DEOS/deos_ws/build/local_navigation/build/lib/local_navigation
+[3.573s] running install
+[3.584s] running install_lib
+[3.624s] creating /home/aaltindas/DEOS/deos_ws/install/local_navigation/lib/python3.12/site-packages/local_navigation
+[3.624s] copying /home/aaltindas/DEOS/deos_ws/build/local_navigation/build/lib/local_navigation/__init__.py -> /home/aaltindas/DEOS/deos_ws/install/local_navigation/lib/python3.12/site-packages/local_navigation
+[3.629s] byte-compiling /home/aaltindas/DEOS/deos_ws/install/local_navigation/lib/python3.12/site-packages/local_navigation/__init__.py to __init__.cpython-312.pyc
+[3.629s] running install_data
+[3.632s] creating /home/aaltindas/DEOS/deos_ws/install/local_navigation/share/ament_index
+[3.632s] creating /home/aaltindas/DEOS/deos_ws/install/local_navigation/share/ament_index/resource_index
+[3.632s] creating /home/aaltindas/DEOS/deos_ws/install/local_navigation/share/ament_index/resource_index/packages
+[3.632s] copying resource/local_navigation -> /home/aaltindas/DEOS/deos_ws/install/local_navigation/share/ament_index/resource_index/packages
+[3.632s] copying package.xml -> /home/aaltindas/DEOS/deos_ws/install/local_navigation/share/local_navigation
+[3.632s] running install_egg_info
+[3.676s] Copying ../../../build/local_navigation/local_navigation.egg-info to /home/aaltindas/DEOS/deos_ws/install/local_navigation/lib/python3.12/site-packages/local_navigation-0.0.0-py3.12.egg-info
+[3.679s] running install_scripts
+[3.969s] writing list of installed files to '/home/aaltindas/DEOS/deos_ws/build/local_navigation/install.log'
+[4.128s] Invoked command in '/home/aaltindas/DEOS/deos_ws/src/planning/local_navigation' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PS1=(deos_env) \[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ PYTHONPATH=/home/aaltindas/DEOS/deos_ws/build/local_navigation/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/aaltindas/DEOS/deos_ws/install/local_navigation/lib/python3.12/site-packages:${PYTHONPATH} VIRTUAL_ENV_PROMPT=(deos_env) /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../../build/local_navigation build --build-base /home/aaltindas/DEOS/deos_ws/build/local_navigation/build install --record /home/aaltindas/DEOS/deos_ws/build/local_navigation/install.log --single-version-externally-managed install_data
