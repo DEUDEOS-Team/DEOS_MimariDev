@@ -44,4 +44,4 @@ navsat_transform:
     broadcast_cartesian_transform: true
     publish_filtered_gps: true
 
-    # DOSYA YOLU : ~/ros2_ws/src/otonom_arac/config/ekf.yaml
+    

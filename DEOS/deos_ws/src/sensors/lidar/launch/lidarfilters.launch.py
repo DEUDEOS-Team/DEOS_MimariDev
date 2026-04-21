@@ -10,7 +10,12 @@ def generate_launch_description():
             executable='sick_generic_caller',
             name='sick_lidar',
             output='screen',
-            parameters=[{'hostname': '192.168.0.1'}] 
+            parameters=[{
+            
+                'scanner_type': 'sick_multiscan',
+                'hostname': '192.168.0.1',
+                'udp_receiver_ip': '192.168.0.100' #RASPİ IP GİRİLECEK !!
+                }] 
         ),
 
         Node(
