@@ -8,7 +8,8 @@ def generate_launch_description():
     
     Launches:
     1. Sensors (Camera, GPS, IMU, LiDAR)
-    2. Localization (PCL localization)
+    2. Perception (Lane detection)
+    3. Localization (PCL localization)
     
     Data Flow:
     /camera/color/image_raw (30 Hz) → Lane detection → /lane_walls (obstacles)
@@ -63,6 +64,17 @@ def generate_launch_description():
         respawn_delay=2,
     )
     
+    # Perception - Lane Detection (from vision_bridge)
+    # Note: This node subscribes to /camera/color/image_raw and publishes /lane_walls
+    lane_detection_node = Node(
+        package='vision_bridge',
+        executable='vision_bridge_node',
+        name='vision_bridge_node',
+        output='screen',
+        respawn=True,
+        respawn_delay=2,
+    )
+    
     # Localization - PCL based (scan matching)
     pcl_localization_node = Node(
         package='pcl_localization_ros2',
@@ -79,6 +91,9 @@ def generate_launch_description():
         gps_node,              # GPS location: /gps/fix (5-10 Hz)
         imu_node,              # Inertial data: /imu/data (100 Hz)
         lidar_node,            # 3D scans: /scan_fullframe, /cloud_unstructured_fullframe (20 Hz)
+        
+        # === PERCEPTION ===
+        lane_detection_node,   # Lane detection: /lane_walls (30 Hz, depends on camera)
         
         # === LOCALIZATION (Position Estimation) ===
         pcl_localization_node, # Scan matching: /odometry/icp, /tf (20 Hz)

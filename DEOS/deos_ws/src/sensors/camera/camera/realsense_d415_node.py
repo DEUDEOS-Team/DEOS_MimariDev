@@ -100,9 +100,17 @@ class RealSenseD415Node(Node):
             color_msg.header.frame_id = "camera_color_frame"
             
             # Depth message (16-bit depth in millimeters)
-            depth_msg = self.bridge.cv2_to_imgmsg(depth_image, encoding="16UC1")
+            # cv_bridge has ARM/Jazzy compatibility issues with 16UC1 — build manually
+            depth_image_uint16 = depth_image.astype(np.uint16)
+            depth_msg = Image()
             depth_msg.header.stamp = timestamp
             depth_msg.header.frame_id = "camera_depth_frame"
+            depth_msg.height = depth_image_uint16.shape[0]
+            depth_msg.width = depth_image_uint16.shape[1]
+            depth_msg.encoding = "16UC1"
+            depth_msg.is_bigendian = False
+            depth_msg.step = depth_msg.width * 2  # 2 bytes per uint16 pixel
+            depth_msg.data = depth_image_uint16.tobytes()
             
             # Publish messages
             self.rgb_publisher.publish(color_msg)
@@ -141,8 +149,11 @@ class RealSenseD415Node(Node):
         return info
 
     def destroy_node(self):
-        self.pipeline.stop()
-        self.get_logger().info("RealSense pipeline stopped")
+        try:
+            self.pipeline.stop()
+            self.get_logger().info("RealSense pipeline stopped")
+        except Exception:
+            pass
         super().destroy_node()
 
 
