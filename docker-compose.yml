@@ -1,0 +1,26 @@
+services:
+  deos:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: epic_torvalds
+    environment:
+      - ROS_DOMAIN_ID=0
+    volumes:
+      - ./DEOS/deos_ws/src:/ros2_ws/src
+    working_dir: /ros2_ws
+    command: bash
+    stdin_open: true
+    tty: true
+    
+    # Device access for real sensors
+    devices:
+      - /dev/bus/usb:/dev/bus/usb           # USB: RealSense D415
+      - /dev/ttyUSB0:/dev/ttyUSB0           # Serial 0: Quectel L86 EVB (GPS)
+      - /dev/ttyUSB1:/dev/ttyUSB1           # Serial 1: IMU (when connected)
+    
+    # Network mode for Ethernet LiDAR (SICK Multiscan165)
+    network_mode: "host"
+    
+    # Privileged mode for device access
+    privileged: true

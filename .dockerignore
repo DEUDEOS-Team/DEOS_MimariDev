@@ -1,1 +1,14 @@
 **/deos_env
+**/build
+**/install
+**/log
+**/*.pyc
+**/__pycache__
+**/.vscode
+**/.git
+**/.gitignore
+**/node_modules
+**/.DS_Store
+**/*.egg-info
+**/dist
+**/.colcon

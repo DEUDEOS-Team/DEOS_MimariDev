@@ -1,0 +1,8 @@
+# ROS 2 Build, Install ve Log Klasörleri
+DEOS/deos_ws/build/
+DEOS/deos_ws/install/
+DEOS/deos_ws/log/
+
+# Python Ön Bellek Dosyaları (İsteğe Bağlı ama Önerilir)
+__pycache__/
+*.pyc

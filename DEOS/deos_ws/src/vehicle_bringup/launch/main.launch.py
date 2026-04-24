@@ -1,64 +1,91 @@
-import os
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
-from launch.launch_description_sources import PythonLaunchDescriptionSource
-from ament_index_python.packages import get_package_share_directory
+from launch_ros.actions import Node
+
 
 def generate_launch_description():
-    # 1. Get Package Directories
-    bringup_dir = get_package_share_directory('vehicle_bringup')
-    lidar_dir = get_package_share_directory('lidar') 
-    fusion_dir = get_package_share_directory('sensor_fusion')
-    camera_dir = get_package_share_directory('camera')
-    imu_dir = get_package_share_directory('imu')
-    perception_dir = get_package_share_directory('perception')
-
-    # 2. Sensor Launches
+    """
+    DEOS Main Launch File - Complete Autonomous Vehicle Stack
     
-    # A. Vehicle Sensor Locations (TF - Transform Frame)
-    sensor_locs_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(bringup_dir, 'launch', 'sensorlocs.launch.py'))
-    )
-
-    # B. Camera Capture
-    camera_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(camera_dir, 'launch', 'camera.launch.py'))
-    )
-
-    # C. Lidar Driver + Voxel Filter
-    lidar_filters_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(lidar_dir, 'launch', 'lidarfilters.launch.py'))
-    )
-
-    # D. IMU + GPS Drivers
-    sensors_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(imu_dir, 'launch', 'sensors.launch.py'))
-    )
-
-    # 3. Perception Layer
+    Launches:
+    1. Sensors (Camera, GPS, IMU, LiDAR)
+    2. Localization (PCL localization)
     
-    # E. Vision Processing (Lane detection)
-    perception_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(perception_dir, 'launch', 'perception.launch.py'))
+    Data Flow:
+    /camera/color/image_raw (30 Hz) → Lane detection → /lane_walls (obstacles)
+    /gps/fix (5-10 Hz) → Mission planning → /goal_pose
+    /imu/data (100 Hz) ──┐
+    /scan_fullframe (20 Hz) ├→ PCL Localization → /odometry/icp
+    /cloud_unstructured (20 Hz) ┘
+    
+    /lane_walls + /odometry/icp → Local navigation → /cmd_vel
+    /cmd_vel → Vehicle controller → Motors/Steering
+    """
+    
+    # Sensor Nodes
+    camera_node = Node(
+        package='camera',
+        executable='realsense_d415_node',
+        name='realsense_d415_node',
+        output='screen',
+        respawn=True,
+        respawn_delay=2,
     )
-
-    # F. NDT Localization (Lidar-based map matching)
-    mappings_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(fusion_dir, 'launch', 'mappings.launch.py'))
+    
+    gps_node = Node(
+        package='imu',
+        executable='gps_node',
+        name='gps_node',
+        output='screen',
+        respawn=True,
+        respawn_delay=2,
     )
-
-    # G. Sensor Fusion (EKF + NavSAT) - Fuses Lidar + GPS + IMU
-    sensor_fus_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(fusion_dir, 'launch', 'sensorfus.launch.py'))
+    
+    imu_node = Node(
+        package='imu',
+        executable='imu_node',
+        name='imu_node',
+        output='screen',
+        respawn=True,
+        respawn_delay=2,
     )
-
-    # 4. Start All Nodes
+    
+    lidar_node = Node(
+        package='sick_scan_xd',
+        executable='sick_generic_caller',
+        name='sick_multiscan165',
+        parameters=[{
+            'hostname': '192.168.0.1',
+            'scanner_type': 'sick_multiscan',
+            'frame_id': 'laser',
+        }],
+        output='screen',
+        respawn=True,
+        respawn_delay=2,
+    )
+    
+    # Localization - PCL based (scan matching)
+    pcl_localization_node = Node(
+        package='pcl_localization_ros2',
+        executable='pcl_localization_node',
+        name='pcl_localization_node',
+        output='screen',
+        respawn=True,
+        respawn_delay=2,
+    )
+    
     return LaunchDescription([
-        sensor_locs_launch,      # TF setup
-        camera_launch,           # Camera driver
-        lidar_filters_launch,    # Lidar + filtering
-        sensors_launch,          # GPS + IMU drivers
-        perception_launch,       # Vision processing
-        mappings_launch,         # Localization
-        sensor_fus_launch        # Multi-sensor fusion
+        # === SENSORS (Raw Data Acquisition) ===
+        camera_node,           # RGB frames: /camera/color/image_raw (30 Hz)
+        gps_node,              # GPS location: /gps/fix (5-10 Hz)
+        imu_node,              # Inertial data: /imu/data (100 Hz)
+        lidar_node,            # 3D scans: /scan_fullframe, /cloud_unstructured_fullframe (20 Hz)
+        
+        # === LOCALIZATION (Position Estimation) ===
+        pcl_localization_node, # Scan matching: /odometry/icp, /tf (20 Hz)
+        
+        # === PIPELINE ===
+        # Camera → Lane detection → /lane_walls (obstacles to avoid)
+        # LiDAR + IMU → PCL localization → /odometry/icp (vehicle position)
+        # Lane walls + Position → Local navigation → /cmd_vel (steering commands)
+        # Steering commands → Vehicle controller → Motors/Steering servos
     ])
