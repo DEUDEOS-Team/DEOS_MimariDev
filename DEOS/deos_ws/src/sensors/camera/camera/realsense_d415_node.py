@@ -128,24 +128,37 @@ class RealSenseD415Node(Node):
             self.get_logger().error(f"Capture error: {e}")
 
     def create_camera_info(self, intrinsics, timestamp, frame_id):
-        """Create CameraInfo message from RealSense intrinsics"""
+        """Create CameraInfo message from RealSense intrinsics (ROS2 Jazzy compatible)"""
         info = CameraInfo()
         info.header.stamp = timestamp
         info.header.frame_id = frame_id
         info.width = intrinsics.width
         info.height = intrinsics.height
-        
-        # Focal length and principal point
-        info.K = [
-            intrinsics.fx, 0, intrinsics.ppx,
-            0, intrinsics.fy, intrinsics.ppy,
-            0, 0, 1
-        ]
-        
+
         # Distortion model and coefficients
+        # ROS2 Jazzy uses lowercase field names: d, k, r, p
         info.distortion_model = "plumb_bob"
-        info.D = list(intrinsics.coeffs)
-        
+        info.d = list(intrinsics.coeffs)
+
+        # Intrinsic matrix (3x3 flattened to 9 floats)
+        info.k = [
+            float(intrinsics.fx), 0.0, float(intrinsics.ppx),
+            0.0, float(intrinsics.fy), float(intrinsics.ppy),
+            0.0, 0.0, 1.0
+        ]
+
+        # Rectification matrix — identity for monocular
+        info.r = [1.0, 0.0, 0.0,
+                  0.0, 1.0, 0.0,
+                  0.0, 0.0, 1.0]
+
+        # Projection matrix (3x4 flattened to 12 floats)
+        info.p = [
+            float(intrinsics.fx), 0.0, float(intrinsics.ppx), 0.0,
+            0.0, float(intrinsics.fy), float(intrinsics.ppy), 0.0,
+            0.0, 0.0, 1.0, 0.0
+        ]
+
         return info
 
     def destroy_node(self):
