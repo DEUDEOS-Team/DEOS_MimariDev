@@ -17,7 +17,7 @@ def generate_launch_description():
     # Launch arguments with defaults
     hostname_arg = DeclareLaunchArgument(
         'hostname',
-        default_value='192.168.0.1',
+        default_value='10.10.10.211',
         description='IP address of SICK Multiscan165'
     )
     
