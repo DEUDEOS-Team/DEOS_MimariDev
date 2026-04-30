@@ -13,8 +13,8 @@ def generate_launch_description():
             parameters=[{
             
                 'scanner_type': 'sick_multiscan',
-                'hostname': '192.168.0.1',
-                'udp_receiver_ip': '192.168.0.100' #RASPİ IP GİRİLECEK !!
+                'hostname': '10.10.10.211',
+                'udp_receiver_ip': '10.10.10.01' #RASPİ IP GİRİLECEK !!
                 }] 
         ),
 
