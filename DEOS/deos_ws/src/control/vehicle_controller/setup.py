@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'vehicle_controller_node = vehicle_controller.vehicle_controller_node:main',
         ],
     },
 )

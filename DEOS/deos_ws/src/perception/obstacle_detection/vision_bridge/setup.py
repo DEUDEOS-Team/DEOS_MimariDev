@@ -23,7 +23,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'vision_bridge_node = vision_bridge.vision_bridge_node:main'
+            'vision_bridge_node = vision_bridge.vision_bridge_node:main',
+            'stereo_detector_node = vision_bridge.stereo_detector_node:main',
+            'perception_fusion_node = vision_bridge.perception_fusion_node:main',
         ],
     },
 )

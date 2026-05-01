@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'mission_planning_node = mission_planning.mission_planning_node:main',
         ],
     },
 )

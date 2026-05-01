@@ -1,4 +1,6 @@
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
@@ -18,9 +20,19 @@ def generate_launch_description():
     /scan_fullframe (20 Hz) ├→ PCL Localization → /odometry/icp
     /cloud_unstructured (20 Hz) ┘
     
-    /lane_walls + /odometry/icp → Local navigation → /cmd_vel
-    /cmd_vel → Vehicle controller → Motors/Steering
+    Algorithm pipeline:
+    - stereo_detector_node: /camera/* -> /perception/stereo_detections (JSON String)
+    - lidar_obstacle_node:  /points_downsampled -> /perception/lidar_obstacles (JSON String)
+    - perception_fusion_node: stereo+lidar+imu -> /perception/* (Bool/Float32)
+    - mission_planning_node: gps+imu + mission_file -> /planning/* (Float32/Bool/String)
+    - vehicle_controller_node: perception+planning -> /cmd_vel + /safety/emergency_stop (STM32 via micro-ROS)
     """
+
+    mission_file_arg = DeclareLaunchArgument(
+        "mission_file",
+        default_value="",
+        description="Görev rotası GeoJSON dosyası tam yolu",
+    )
     
     # Sensor Nodes
     camera_node = Node(
@@ -64,13 +76,41 @@ def generate_launch_description():
         respawn_delay=2,
     )
     
-    # Perception - Lane Detection (from vision_bridge)
-    # Note: This node subscribes to /camera/color/image_raw and publishes /lane_walls
-    lane_detection_node = Node(
-        package='vision_bridge',
-        executable='vision_bridge_node',
-        name='vision_bridge_node',
-        output='screen',
+    # Perception (algorithms)
+    stereo_detector_node = Node(
+        package="vision_bridge",
+        executable="stereo_detector_node",
+        name="stereo_detector_node",
+        parameters=[{
+            "image_width": 640,
+            "image_height": 480,
+            "focal_length_px": 320.0,
+        }],
+        output="screen",
+        respawn=True,
+        respawn_delay=2,
+    )
+
+    lidar_obstacle_node = Node(
+        package="sensor_fusion",
+        executable="lidar_obstacle_node",
+        name="lidar_obstacle_node",
+        parameters=[{
+            "cluster_epsilon_m": 0.5,
+            "cluster_min_points": 5,
+            "max_distance_m": 20.0,
+            "corridor_half_width_m": 3.0,
+        }],
+        output="screen",
+        respawn=True,
+        respawn_delay=2,
+    )
+
+    perception_fusion_node = Node(
+        package="vision_bridge",
+        executable="perception_fusion_node",
+        name="perception_fusion_node",
+        output="screen",
         respawn=True,
         respawn_delay=2,
     )
@@ -84,8 +124,37 @@ def generate_launch_description():
         respawn=True,
         respawn_delay=2,
     )
+
+    # Planning
+    mission_planning_node = Node(
+        package="mission_planning",
+        executable="mission_planning_node",
+        name="mission_planning_node",
+        parameters=[{
+            "mission_file": LaunchConfiguration("mission_file"),
+            "heading_offset_deg": 0.0,
+        }],
+        output="screen",
+        respawn=True,
+        respawn_delay=2,
+    )
+
+    # Control
+    vehicle_controller_node = Node(
+        package="vehicle_controller",
+        executable="vehicle_controller_node",
+        name="vehicle_controller_node",
+        parameters=[{
+            "max_speed_mps": 3.0,
+            "max_steer_rads": 1.0,
+        }],
+        output="screen",
+        respawn=True,
+        respawn_delay=2,
+    )
     
     return LaunchDescription([
+        mission_file_arg,
         # === SENSORS (Raw Data Acquisition) ===
         camera_node,           # RGB frames: /camera/color/image_raw (30 Hz)
         gps_node,              # GPS location: /gps/fix (5-10 Hz)
@@ -93,14 +162,19 @@ def generate_launch_description():
         lidar_node,            # 3D scans: /scan_fullframe, /cloud_unstructured_fullframe (20 Hz)
         
         # === PERCEPTION ===
-        lane_detection_node,   # Lane detection: /lane_walls (30 Hz, depends on camera)
+        stereo_detector_node,
+        lidar_obstacle_node,
+        perception_fusion_node,
         
         # === LOCALIZATION (Position Estimation) ===
         pcl_localization_node, # Scan matching: /odometry/icp, /tf (20 Hz)
+
+        # === PLANNING ===
+        mission_planning_node,
+
+        # === CONTROL ===
+        vehicle_controller_node,
         
         # === PIPELINE ===
-        # Camera → Lane detection → /lane_walls (obstacles to avoid)
-        # LiDAR + IMU → PCL localization → /odometry/icp (vehicle position)
-        # Lane walls + Position → Local navigation → /cmd_vel (steering commands)
-        # Steering commands → Vehicle controller → Motors/Steering servos
+        # Sensors -> Perception -> Planning -> Controller -> /cmd_vel
     ])
