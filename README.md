@@ -7,6 +7,49 @@ Sensörlerden gelen veriler (kamera/derinlik, LiDAR, GPS, IMU) ROS 2 graph’ın
 Bu README “nasıl kurulur”dan çok **mimariyi** (paketler, node’lar, topic sözleşmeleri, veri akışı, öncelikler) açıklar.
 
 > Kurulum/çalıştırma adımları için ayrıca `SETUP_ROS2_PIPELINE.md` dosyasına bakın.
+>
+> Raspberry Pi’de güç verildiğinde otomatik kalkış (systemd + Docker) için `OPS_AUTOSTART.md` dosyasına bakın.
+
+## Raspberry Pi: repo yolu ve systemd
+
+Otomatik bringup/health yapısı (`ops/systemd/*.service`, `ops/scripts/*`) **sabit dosya yolları** kullanır; böylece servisler her boot’ta aynı komutlarla çalışır.
+
+### Önerilen konum
+
+- Repo kökünü cihazda **`/opt/deos`** altına koyun (klon veya kopya).
+- `docker compose` komutları repo kökünden (`docker-compose.yml` burada olduğu için) çalıştırılır; `WorkingDirectory=/opt/deos` buna göre ayarlıdır.
+
+Bu varsayılan, dokümantasyondaki (`OPS_AUTOSTART.md`) kopyalama yollarıyla uyumludur.
+
+### Yolu değiştirebilir miyiz?
+
+Evet. İki pratik yöntem:
+
+1. **Sembolik bağlantı (en az değişiklik)**  
+   Repoyu örneğin `/home/pi/DEOS-Mimari` altında tutup systemd’nin beklediği yolu bağlayın:
+
+   ```bash
+   sudo ln -sfn /home/pi/DEOS-Mimari /opt/deos
+   ```
+
+   Unit dosyalarını değiştirmeniz gerekmez (gerçek dosyalar `readlink -f /opt/deos` ile çözülür).
+
+2. **Unit ve ortam değişkenlerini güncelleme**  
+   Repoyu başka bir dizine (`/veri/deos` gibi) koyacaksanız şunları **aynı köke** işaret edecek şekilde düzenleyin:
+
+   - `/etc/systemd/system/deos-bringup.service` içindeki `WorkingDirectory=`, `ExecStart=`, `ExecStop=` yolları (`ExecStart` mutlaka o kopyadaki `ops/scripts/deos_compose_up.sh` dosyasına gitsin)
+   - `/etc/systemd/system/deos-health.service` içindeki `WorkingDirectory=` ve `Environment=REPO_ROOT=...`
+
+   `deos_compose_up.sh`, `REPO_ROOT` ortam değişkeni verilmedikçe repo kökünü **scriptin bulunduğu yoldan** türetir; böylece `ExecStart` doğru kopyayı gösterdiği sürece `docker compose` her zaman o kopyanın `docker-compose.yml` dosyasını kullanır.
+
+   Ardından:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart deos-bringup deos-health
+   ```
+
+İsteğe bağlı: her iki serviste de aynı kökü sabitlemek için `Environment=REPO_ROOT=/yeni/yol` kullanılabilir (`deos-health` zaten `REPO_ROOT` ile `docker compose exec` yollarını üretir).
 
 ## Mimari özet
 

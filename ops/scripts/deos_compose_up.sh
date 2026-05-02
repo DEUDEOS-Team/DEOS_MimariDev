@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="${REPO_ROOT:-/opt/deos}"
+# Repo kökü: ortamda REPO_ROOT verilmediyse bu scriptin bulunduğu .../ops/scripts/ -> iki üst dizin
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 cd "$REPO_ROOT"
 
 exec docker compose \
