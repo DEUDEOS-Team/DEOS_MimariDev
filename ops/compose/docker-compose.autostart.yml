@@ -1,0 +1,17 @@
+services:
+  deos:
+    # Autostart profile: container açılınca build + launch
+    command: >
+      bash -lc "
+        set -euo pipefail;
+        source /opt/ros/jazzy/setup.bash;
+        cd /ros2_ws;
+        if [ ! -f /ros2_ws/install/setup.bash ]; then
+          echo '[deos] install/ yok, colcon build yapılıyor...';
+          colcon build --symlink-install;
+        fi;
+        source /ros2_ws/install/setup.bash;
+        echo '[deos] bringup başlıyor: ros2 launch vehicle_bringup main.launch.py';
+        exec ros2 launch vehicle_bringup main.launch.py
+      "
+

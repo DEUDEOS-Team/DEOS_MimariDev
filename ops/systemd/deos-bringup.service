@@ -1,0 +1,20 @@
+[Unit]
+Description=DEOS bringup (docker compose)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/deos
+ExecStart=/opt/deos/ops/scripts/deos_compose_up.sh
+ExecStop=/usr/bin/docker compose -f /opt/deos/docker-compose.yml -f /opt/deos/ops/compose/docker-compose.autostart.yml down
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=0
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
