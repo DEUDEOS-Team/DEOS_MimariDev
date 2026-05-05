@@ -23,6 +23,10 @@ class PerceptionFusionNode(Node):
     def __init__(self):
         super().__init__("perception_fusion_node")
 
+        self.declare_parameter("hardware_motion_enable_topic", "/hardware/motion_enable")
+        self.declare_parameter("hardware_motion_enable_timeout_s", 0.5)
+        self.declare_parameter("hardware_motion_enable_fail_safe_stop", True)
+
         self._sign = TrafficSignLogic()
         self._light = TrafficLightLogic()
         self._obstacle = ObstacleLogic()
@@ -35,9 +39,18 @@ class PerceptionFusionNode(Node):
         self._stereo_stamp: float = 0.0
         self._lidar_stamp: float = 0.0
 
+        # STM32 -> Pi: tek topic, olay bazlı (sadece değişimde publish edilir)
+        # std_msgs/Bool: false = DUR (algoritmalar durur), true = DEVAM
+        # STM32 ilk "DEVAM" mesajını gönderene kadar güvenli tarafta kal
+        self._motion_enable: bool = False
+        self._motion_enable_stamp: float = 0.0
+
         self.create_subscription(String, "/perception/stereo_detections", self._stereo_cb, 10)
         self.create_subscription(String, "/perception/lidar_obstacles", self._lidar_cb, 10)
         self.create_subscription(Imu, "/imu/data", self._imu_cb, 10)
+
+        motion_topic = str(self.get_parameter("hardware_motion_enable_topic").value)
+        self.create_subscription(Bool, motion_topic, self._motion_enable_cb, 10)
 
         self._pub_estop = self.create_publisher(Bool, "/perception/emergency_stop", 10)
         self._pub_speed = self.create_publisher(Float32, "/perception/speed_cap", 10)
@@ -45,7 +58,14 @@ class PerceptionFusionNode(Node):
         self._pub_has_steer = self.create_publisher(Bool, "/perception/has_steering_override", 10)
 
         self.create_timer(0.05, self._tick)  # 20 Hz
-        self.get_logger().info("perception_fusion_node ready")
+        self.get_logger().info(
+            "perception_fusion_node ready — "
+            f"STM32 motion topic={motion_topic} (Bool: false=STOP algorithms, true=RUN)"
+        )
+
+    def _motion_enable_cb(self, msg: Bool) -> None:
+        self._motion_enable = bool(msg.data)
+        self._motion_enable_stamp = time.monotonic()
 
     def _stereo_cb(self, msg: String) -> None:
         try:
@@ -91,6 +111,26 @@ class PerceptionFusionNode(Node):
 
     def _tick(self) -> None:
         now = time.monotonic()
+        timeout_s = float(self.get_parameter("hardware_motion_enable_timeout_s").value)
+        fail_safe = bool(self.get_parameter("hardware_motion_enable_fail_safe_stop").value)
+
+        motion_ok = (now - self._motion_enable_stamp) <= timeout_s
+        if not motion_ok and fail_safe:
+            # STM32 komut akışı kesildi: güvenli tarafta kal (algoritmaları durdur)
+            self._pub_estop.publish(Bool(data=True))
+            self._pub_speed.publish(Float32(data=0.0))
+            self._pub_steer.publish(Float32(data=0.0))
+            self._pub_has_steer.publish(Bool(data=False))
+            return
+
+        if not self._motion_enable:
+            # STM32: DUR — algoritma/model çalıştırma, güvenli kısıtları yayınla
+            self._pub_estop.publish(Bool(data=True))
+            self._pub_speed.publish(Float32(data=0.0))
+            self._pub_steer.publish(Float32(data=0.0))
+            self._pub_has_steer.publish(Bool(data=False))
+            return
+
         stereo = self._stereo if (now - self._stereo_stamp) < self.STEREO_TIMEOUT_S else []
         lidar = self._lidar if (now - self._lidar_stamp) < self.LIDAR_TIMEOUT_S else []
 

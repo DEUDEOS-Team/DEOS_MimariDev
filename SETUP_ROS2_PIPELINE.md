@@ -17,6 +17,9 @@ repoya eklenen node/paketlerle **çalışır pipeline** kurulumunu özetler.
   - `mission_planning_node` → `/planning/*`
 - **Control**: `vehicle_controller`
   - `vehicle_controller_node` → `/cmd_vel` + `/safety/emergency_stop`
+    - `/perception/emergency_stop` **false → true** yükselen kenarında `/safety/emergency_stop` üzerinde **sınırlı sayıda** `True` pulse yayınlanır (default: 3; parametre: `safety_emergency_stop_pulse_count`).
+    - Acil durum / perception timeout sırasında default olarak **`/cmd_vel` publish edilmez** (parametre: `publish_cmd_vel_in_emergency`, default `false`).
+    - Acil durumdan çıkışta (opsiyonel) bir kez `/safety/emergency_stop=false` yayınlanabilir (parametre: `publish_safety_emergency_stop_false_on_clear`, default `true`).
 
 ### 2) Launch
 
@@ -65,8 +68,35 @@ STM32 tarafında agent hedefi:
 - **IP**: host (Raspberry Pi) ethernet IP
 - **Port**: `8888`
 
+#### 4.1) STM32 komut topic’i (tek topic, olay bazlı)
+
+STM32 (micro-ROS client) Raspberry Pi ROS graph’ına şu topic üzerinden **komut** gönderir:
+
+- **`/hardware/motion_enable`** (`std_msgs/Bool`)
+  - `data: false` → **DUR**: `perception_fusion_node` içinde algoritma/model hesapları çalıştırılmaz; güvenli kısıtlar yayınlanır.
+  - `data: true` → **DEVAM**: normal algı/algoritma akışı devam eder.
+
+Yayın şekli: **sadece durum değişince** publish (keepalive yok).
+
+Not: Pi tarafında güvenlik için **STM32 ilk `true` (DEVAM) mesajını gönderene kadar** algı/algoritma çalıştırılmaz.
+
+Fail-safe (Pi tarafı, `perception_fusion_node` parametreleri):
+
+- `hardware_motion_enable_timeout_s` (default `0.5`)
+- `hardware_motion_enable_fail_safe_stop` (default `True`)
+
+Anlamı: belirli süre STM32’den mesaj gelmezse Pi **DUR** kabul eder.
+
+Örnek test (STM32 yokken):
+
+```bash
+ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: false}" -1
+ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: true}" -1
+```
+
 ### 5) Topic haritası (hızlı kontrol)
 
+- **STM32 komut**: `/hardware/motion_enable` (`std_msgs/Bool`)
 - **Stereo**: `/perception/stereo_detections` (JSON)
 - **LiDAR**: `/perception/lidar_obstacles` (JSON)
 - **Karar**:
@@ -81,7 +111,7 @@ STM32 tarafında agent hedefi:
   - `/planning/arrived` (`std_msgs/Bool`)
 - **Çıkış**:
   - `/cmd_vel` (`geometry_msgs/Twist`)
-  - `/safety/emergency_stop` (`std_msgs/Bool`)
+  - `/safety/emergency_stop` (`std_msgs/Bool`) — **sürekli spam yok**; estop talebinde kısa `True` pulse + (opsiyonel) clear sonrası tek `false`
 
 CLI kontrol:
 
@@ -89,5 +119,6 @@ CLI kontrol:
 ros2 topic list
 ros2 topic echo /cmd_vel
 ros2 topic echo /perception/emergency_stop
+ros2 topic echo /safety/emergency_stop
 ```
 
