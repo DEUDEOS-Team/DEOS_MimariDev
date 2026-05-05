@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 decision_arbiter.py
 -------------------
@@ -21,7 +19,6 @@ Not: Bu modül ROS içermez.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class ReasonCode(str, Enum):
@@ -84,7 +81,7 @@ class Candidate:
     name: str
     emergency_stop: bool = False
     speed_cap: float = 1.0
-    steer_override: Optional[float] = None  # None ise override yok
+    steer_override: float | None = None  # None ise override yok
     reasons: list[ReasonCode] = field(default_factory=list)
 
 

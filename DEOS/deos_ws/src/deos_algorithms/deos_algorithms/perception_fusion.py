@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 perception_fusion.py
 -------------------
@@ -13,7 +11,6 @@ Bu dosya ROS içermez; gerçek sensör sürücüleri dışarıda kalır.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from deos_algorithms.obstacle_logic import ObstacleDetection, classify_obstacle
 from deos_algorithms.parking_logic import ParkingDetection
@@ -29,7 +26,7 @@ class PerceptionFrame:
     obstacle_dets: list[ObstacleDetection] = field(default_factory=list)
     stereo_obstacle_dets: list[ObstacleDetection] = field(default_factory=list)
     lidar_obstacle_dets: list[ObstacleDetection] = field(default_factory=list)
-    imu: Optional[ImuSample] = None
+    imu: ImuSample | None = None
 
 
 def fuse(

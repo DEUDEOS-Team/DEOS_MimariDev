@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -14,8 +11,8 @@ class StereoBbox:
     class_name: str
     confidence: float
     bbox_px: tuple[float, float, float, float]  # x1,y1,x2,y2
-    distance_m: Optional[float] = None
-    lateral_m: Optional[float] = None
+    distance_m: float | None = None
+    lateral_m: float | None = None
 
 
 @dataclass(frozen=True)
@@ -27,7 +24,7 @@ class LidarObstacle:
     distance_m: float
     lateral_m: float
     # Optional: if you also have a 2D bbox from camera association, pass it through.
-    bbox_px: Optional[tuple[float, float, float, float]] = None
+    bbox_px: tuple[float, float, float, float] | None = None
 
 
 @dataclass(frozen=True)

@@ -15,8 +15,6 @@ Girdi:
   python tools/plan_route_dijkstra.py --centerlines ../../../../maps/lane_centerlines.geojson --mission <mission>.geojson
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import sys

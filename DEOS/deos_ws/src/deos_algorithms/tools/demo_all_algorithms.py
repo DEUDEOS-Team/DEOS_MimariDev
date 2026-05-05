@@ -12,8 +12,6 @@ Birim testler için: `python -m pytest -vv`
   python tools/demo_all_algorithms.py
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from dataclasses import asdict, is_dataclass

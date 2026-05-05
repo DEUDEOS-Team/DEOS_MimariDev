@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 mission_manager.py
 ------------------
@@ -8,7 +6,6 @@ WaypointManager üstüne ekleyen ince bir katman.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 from deos_algorithms.geojson_mission_reader import TaskType
 from deos_algorithms.waypoint_manager import GpsPosition, MissionPlan, WaypointManager, WaypointState
@@ -26,9 +23,9 @@ class MissionDecision:
 class MissionManager:
     def __init__(self, plan: MissionPlan):
         self.wp = WaypointManager(plan, auto_advance=False)
-        self._hold_started_at: Optional[float] = None
-        self._holding_task: Optional[str] = None
-        self._park_started_at: Optional[float] = None
+        self._hold_started_at: float | None = None
+        self._holding_task: str | None = None
+        self._park_started_at: float | None = None
         self._park_active: bool = False
         self._park_completed: bool = False
 

@@ -5,7 +5,6 @@ Yaya / koni / bariyer tespitlerini davranisa ceviren ust katman.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from deos_algorithms.safety_logic import (
     SafetyLogic,
@@ -45,7 +44,7 @@ STATIC_LANE_CHANGE_SPEED_CAP = 0.35
 STATIC_EMERGENCY_DISTANCE_M = 1.5
 
 
-def classify_obstacle(class_name: str) -> Optional[str]:
+def classify_obstacle(class_name: str) -> str | None:
     if not class_name:
         return None
     low = class_name.strip().lower()
@@ -75,8 +74,8 @@ class ObstacleDetection:
     kind: str
     confidence: float
     bbox_px: tuple[float, float, float, float]
-    estimated_distance_m: Optional[float] = None
-    estimated_lateral_m: Optional[float] = None
+    estimated_distance_m: float | None = None
+    estimated_lateral_m: float | None = None
 
 
 @dataclass
@@ -84,7 +83,7 @@ class ObstacleState:
     emergency_stop: bool = False
     speed_cap_ratio: float = 1.0
     threat_level: ThreatLevel = ThreatLevel.NONE
-    closest_obstacle_m: Optional[float] = None
+    closest_obstacle_m: float | None = None
 
     pedestrian_in_corridor: bool = False
     cone_in_corridor: bool = False
@@ -93,7 +92,7 @@ class ObstacleState:
     suggest_lane_change: bool = False
     road_blocked: bool = False
     waiting_for_dynamic_obstacle: bool = False
-    avoidance_direction: Optional[str] = None
+    avoidance_direction: str | None = None
     behavior_mode: str = ObstacleBehavior.CLEAR
 
     active_kinds: list[str] = field(default_factory=list)
@@ -204,7 +203,7 @@ class ObstacleLogic:
         state.road_blocked = barrier_count > 1
 
     @staticmethod
-    def _nearest(threats: list[ThreatObservation]) -> Optional[ThreatObservation]:
+    def _nearest(threats: list[ThreatObservation]) -> ThreatObservation | None:
         if not threats:
             return None
         return min(threats, key=lambda threat: threat.distance_m)

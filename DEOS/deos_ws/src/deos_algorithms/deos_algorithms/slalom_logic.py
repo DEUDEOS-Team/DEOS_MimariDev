@@ -4,10 +4,7 @@ slalom_logic.py
 Koni engelleri arasında slalom manevrasını yönetir.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
-from typing import Optional
 
 from deos_algorithms.obstacle_logic import ObstacleDetection, ObstacleKind
 from deos_algorithms.safety_logic import IMAGE_HEIGHT_PX, IMAGE_WIDTH_PX
@@ -40,7 +37,7 @@ class _KoniHedef:
     lateral_offset: float
     taraf: str
     yakinlik: float
-    mesafe_m: Optional[float]
+    mesafe_m: float | None
 
 
 @dataclass
@@ -147,7 +144,7 @@ class SlalomLogic:
         self._tek_taraf_sayac = self._tek_taraf_sayac + 1 if same_sign else 0
         return self._tek_taraf_sayac >= S_WEAVE_SINGLE_SIDE_FRAMES
 
-    def _baslangic_kapisi_offset(self, koniler: list[ObstacleDetection]) -> Optional[float]:
+    def _baslangic_kapisi_offset(self, koniler: list[ObstacleDetection]) -> float | None:
         if len(koniler) < 2:
             return None
         k1, k2 = koniler[0], koniler[1]

@@ -4,11 +4,8 @@ geojson_mission_reader.py
 GeoJSON FeatureCollection dosyasından görev noktalarını okur.
 """
 
-from __future__ import annotations
-
 import json
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 class TaskType:
@@ -38,12 +35,12 @@ DEFAULT_SPEED_LIMIT_RATIO = 1.0
 @dataclass
 class MissionPoint:
     index: int
-    point_id: Optional[int]
+    point_id: int | None
     name: str
     lat: float
     lon: float
     task: str
-    heading_deg: Optional[float]
+    heading_deg: float | None
     speed_limit_ratio: float
     arrival_radius_m: float
 
@@ -52,14 +49,14 @@ class MissionPoint:
 class MissionPlan:
     points: list[MissionPoint] = field(default_factory=list)
     source_file: str = ""
-    raw_crs: Optional[str] = None
+    raw_crs: str | None = None
 
     @property
-    def start(self) -> Optional[MissionPoint]:
+    def start(self) -> MissionPoint | None:
         return next((p for p in self.points if p.task == TaskType.START), None)
 
     @property
-    def goal(self) -> Optional[MissionPoint]:
+    def goal(self) -> MissionPoint | None:
         return next(
             (p for p in reversed(self.points) if p.task in {TaskType.STOP, TaskType.DROPOFF}),
             None,
@@ -99,7 +96,7 @@ class GeoJsonMissionReader:
 
         return plan
 
-    def _parse_feature(self, idx: int, feature: dict) -> Optional[MissionPoint]:
+    def _parse_feature(self, idx: int, feature: dict) -> MissionPoint | None:
         if feature.get("type") != "Feature":
             return None
 
@@ -136,7 +133,7 @@ class GeoJsonMissionReader:
             else:
                 task = TaskType.CHECKPOINT
 
-        heading_deg: Optional[float] = None
+        heading_deg: float | None = None
         if "heading_deg" in props and props["heading_deg"] is not None:
             heading_deg = float(props["heading_deg"]) % 360.0
 

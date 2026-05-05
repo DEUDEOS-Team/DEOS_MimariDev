@@ -11,7 +11,6 @@ Sarı davranışı (özet):
 """
 
 from dataclasses import dataclass
-from typing import Optional
 import time
 
 
@@ -38,7 +37,7 @@ GREEN_ALIASES = {
 }
 
 
-def classify_color(class_name: str) -> Optional[str]:
+def classify_color(class_name: str) -> str | None:
     if not class_name:
         return None
     low = class_name.strip().lower()
@@ -70,7 +69,7 @@ class LightDetection:
     color: str
     confidence: float
     bbox_px: tuple[float, float, float, float]
-    estimated_distance_m: Optional[float] = None
+    estimated_distance_m: float | None = None
 
 
 @dataclass
@@ -80,8 +79,8 @@ class TrafficLightState:
     prepare_to_move: bool = False
     can_go: bool = False
     speed_cap_ratio: float = 1.0
-    active_color: Optional[str] = None
-    last_distance_m: Optional[float] = None
+    active_color: str | None = None
+    last_distance_m: float | None = None
     reason: str = ""
 
 
@@ -90,7 +89,7 @@ class _LightMemory:
     color: str
     frames_seen: int
     last_seen_time: float
-    last_distance_m: Optional[float]
+    last_distance_m: float | None
     last_confidence: float
     confirmed: bool
 
@@ -99,13 +98,13 @@ class TrafficLightLogic:
     def __init__(self):
         self._memories: dict[str, _LightMemory] = {}
         # Son üretilen kararda kırmızı/yeşil hangisi baskındı (sarı bağlamı için)
-        self._last_non_yellow: Optional[str] = None
+        self._last_non_yellow: str | None = None
 
     def update(
         self,
         detections: list[LightDetection],
-        now: Optional[float] = None,
-        vehicle_speed_mps: Optional[float] = None,
+        now: float | None = None,
+        vehicle_speed_mps: float | None = None,
     ) -> TrafficLightState:
         if now is None:
             now = time.time()
@@ -151,12 +150,12 @@ class TrafficLightLogic:
         for color in expired:
             del self._memories[color]
 
-    def _stationary(self, vehicle_speed_mps: Optional[float]) -> bool:
+    def _stationary(self, vehicle_speed_mps: float | None) -> bool:
         if vehicle_speed_mps is None:
             return False
         return abs(float(vehicle_speed_mps)) <= STATIONARY_SPEED_EPS_MPS
 
-    def _decide(self, active: list[_LightMemory], vehicle_speed_mps: Optional[float] = None) -> TrafficLightState:
+    def _decide(self, active: list[_LightMemory], vehicle_speed_mps: float | None = None) -> TrafficLightState:
         state = TrafficLightState()
         if not active:
             return state

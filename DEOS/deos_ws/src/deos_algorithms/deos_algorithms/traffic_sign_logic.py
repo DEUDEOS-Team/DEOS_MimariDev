@@ -15,7 +15,6 @@ safety_logic.py ile aynı tasarım: ROS bağımsız, saf Python, test edilebilir
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 import time
 
 
@@ -92,7 +91,7 @@ class SignDetection:
     class_name: str
     confidence: float
     bbox_px: tuple[float, float, float, float]
-    estimated_distance_m: Optional[float] = None
+    estimated_distance_m: float | None = None
 
 
 @dataclass
@@ -100,7 +99,7 @@ class TurnPermissions:
     left: bool = True
     straight: bool = True
     right: bool = True
-    forced_direction: Optional[str] = None
+    forced_direction: str | None = None
 
     def apply_restriction(self, sign_class: str) -> None:
         if sign_class == SignClass.NO_LEFT_TURN:
@@ -152,7 +151,7 @@ class _SignMemory:
     class_name: str
     frames_seen: int
     last_seen_time: float
-    last_distance_m: Optional[float]
+    last_distance_m: float | None
     confirmed: bool
 
 
@@ -160,11 +159,11 @@ class TrafficSignLogic:
     def __init__(self):
         self._memories: dict[str, _SignMemory] = {}
         self._pending_stop: bool = False
-        self._stop_started_at: Optional[float] = None
-        self._stop_cooldown_until: Optional[float] = None
+        self._stop_started_at: float | None = None
+        self._stop_cooldown_until: float | None = None
         self._pending_turn_restrictions: TurnPermissions = TurnPermissions()
 
-    def update(self, detections: list[SignDetection], now: Optional[float] = None) -> TrafficSignState:
+    def update(self, detections: list[SignDetection], now: float | None = None) -> TrafficSignState:
         if now is None:
             now = time.time()
 
@@ -180,7 +179,7 @@ class TrafficSignLogic:
             if cls in TURN_RESTRICTION:
                 del self._memories[cls]
 
-    def notify_stop_completed(self, now: Optional[float] = None) -> None:
+    def notify_stop_completed(self, now: float | None = None) -> None:
         if now is None:
             now = time.time()
         self._pending_stop = False

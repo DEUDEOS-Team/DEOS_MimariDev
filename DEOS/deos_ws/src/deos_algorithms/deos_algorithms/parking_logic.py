@@ -14,10 +14,7 @@ alanını doldurmalıdır; ROS tarafında ``perception_fusion.parking_detections
 ile yalnızca tabela tespitleri de aday listesine dönüştürülebilir.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
-from typing import Optional
 
 
 CAMERA_HEIGHT_M = 1.2
@@ -68,8 +65,8 @@ class ParkState:
     steering: float = 0.0
     speed_ratio: float = 0.0
     reverse: bool = False
-    distance_m: Optional[float] = None
-    lateral_m: Optional[float] = None
+    distance_m: float | None = None
+    lateral_m: float | None = None
     complete: bool = False
     reason: str = ""
     # Uygun (izinli) aday yokken yalnızca park yasak / belirsiz tespit varsa True olabilir
@@ -96,7 +93,7 @@ class ParkingLogic:
     def notify_parked(self) -> None:
         self._reset()
 
-    def _transition(self, dist: Optional[float], lateral: Optional[float]) -> ParkState:
+    def _transition(self, dist: float | None, lateral: float | None) -> ParkState:
         if self._phase == ParkPhase.WAITING:
             if dist is not None and dist <= APPROACH_TRIGGER_M:
                 self._phase = ParkPhase.APPROACHING
@@ -142,7 +139,7 @@ class ParkingLogic:
             reason="park tamamlandı",
         )
 
-    def _maneuver_dik(self, dist: Optional[float], lateral: Optional[float]) -> ParkState:
+    def _maneuver_dik(self, dist: float | None, lateral: float | None) -> ParkState:
         if dist is None or dist > MANEUVER_TRIGGER_M:
             self._park_confirm = 0
             return ParkState(
@@ -176,12 +173,12 @@ class ParkingLogic:
             reason=f"park yerine konumlanıyor ({self._park_confirm}/{PARK_CONFIRM_FRAMES})",
         )
 
-    def _lateral_steering(self, lateral: Optional[float]) -> float:
+    def _lateral_steering(self, lateral: float | None) -> float:
         if lateral is None:
             return 0.0
         return max(-1.0, min(1.0, -lateral * LATERAL_GAIN))
 
-    def _estimate_distance(self, det: ParkingDetection) -> Optional[float]:
+    def _estimate_distance(self, det: ParkingDetection) -> float | None:
         y2 = det.bbox_px[3]
         dy = y2 - PRINCIPAL_POINT_Y_PX
         if dy <= 0:

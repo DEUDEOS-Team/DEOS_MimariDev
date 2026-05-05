@@ -12,8 +12,6 @@ Birim testler için: `python -m pytest -vv`
   python tools/demo_algorithms.py
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 from dataclasses import asdict

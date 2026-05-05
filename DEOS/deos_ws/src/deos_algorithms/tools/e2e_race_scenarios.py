@@ -15,8 +15,6 @@ Kapsam (bu repodaki mevcut mimari):
   python tools/e2e_race_scenarios.py
 """
 
-from __future__ import annotations
-
 import json
 import sys
 import time

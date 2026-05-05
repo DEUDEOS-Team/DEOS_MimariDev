@@ -4,11 +4,8 @@ waypoint_manager.py
 GPS tabanlı global rota takibi (Waypoint Manager).
 """
 
-from __future__ import annotations
-
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 from deos_algorithms.geojson_mission_reader import MissionPlan, MissionPoint
 
@@ -28,8 +25,8 @@ class GpsPosition:
 
 @dataclass
 class WaypointState:
-    current_wp: Optional[MissionPoint] = None
-    next_wp: Optional[MissionPoint] = None
+    current_wp: MissionPoint | None = None
+    next_wp: MissionPoint | None = None
 
     bearing_to_wp_deg: float = 0.0
     bearing_error_deg: float = 0.0
