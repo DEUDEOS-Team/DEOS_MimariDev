@@ -1,0 +1,177 @@
+================================================================================
+RASPI 5 - QUICK COMMAND REFERENCE
+================================================================================
+
+RUN ON RASPI (in container or directly):
+
+================================================================================
+TERMINAL 1: LIDAR (keep running)
+================================================================================
+
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 launch lidar sick_multiscan165.launch.py hostname:=10.10.10.211
+
+Topics: /cloud_all_fields_fullframe, /scan_fullframe, /sick_scansegment_xd/imu
+
+================================================================================
+TERMINAL 2: GPS
+================================================================================
+
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 run imu gps_node --ros-args -p port:=/dev/ttyUSB0 -p baudrate:=9600
+
+Topics: /gps/fix
+
+If port error, try: /dev/ttyUSB1 or /dev/ttyACM0
+If still error, try: -p baudrate:=115200
+
+================================================================================
+TERMINAL 3: LIDAR IMU REMAPPER
+================================================================================
+
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 topic relay /sick_scansegment_xd/imu /imu/data
+
+Topics: /imu/data (remapped from /sick_scansegment_xd/imu)
+
+================================================================================
+TERMINAL 4: SENSOR FUSION (GPS + IMU → /odom)
+================================================================================
+
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 launch sensor_fusion sensorfus.launch.py
+
+Topics: /odom, /odometry/gps, /tf
+
+================================================================================
+TERMINAL 5: PCL LOCALIZATION (LIDAR SCAN MATCHING)
+================================================================================
+
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 launch pcl_localization_ros2 pcl_localization.launch.py
+
+Topics: /odometry/icp, /map transform
+
+================================================================================
+TERMINAL 6: OBSTACLE DETECTION
+================================================================================
+
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 launch perception obstacle_detection.launch.py
+
+Topics: /obstacles
+
+================================================================================
+TERMINAL 7: LOCAL NAVIGATION
+================================================================================
+
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 launch planning local_navigation.launch.py
+
+Topics: /cmd_vel
+
+================================================================================
+TERMINAL 8: VEHICLE CONTROLLER
+================================================================================
+
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 launch control vehicle_controller.launch.py
+
+Topics: listens to /cmd_vel, outputs to motors
+
+================================================================================
+VERIFY SYSTEM
+================================================================================
+
+Check all topics active:
+
+ros2 topic list
+
+Should show:
+  /cloud_all_fields_fullframe
+  /gps/fix
+  /imu/data
+  /odom
+  /odometry/icp
+  /obstacles
+  /cmd_vel
+
+Check data rates:
+
+ros2 topic hz /odom              (should be ~30 Hz)
+ros2 topic hz /odometry/icp      (should be ~10-20 Hz)
+ros2 topic hz /cloud_all_fields_fullframe (should be ~10-20 Hz)
+
+View localization output:
+
+ros2 topic echo /odom --once
+
+View PCL scan matching:
+
+ros2 topic echo /odometry/icp --once
+
+================================================================================
+IF SOMETHING FAILS
+================================================================================
+
+GPS won't connect:
+  Check: ls /dev/ttyUSB*
+  Try different port: -p port:=/dev/ttyUSB1
+  Try different baud: -p baudrate:=115200
+
+EKF not working (/odom not publishing):
+  Check GPS has fix: ros2 topic hz /gps/fix (should show data)
+  Check IMU relay: ros2 topic hz /imu/data (should show data)
+  If either missing, fix that terminal first
+
+PCL localization failing:
+  Check map exists: ls -lh /ros2_ws/src/DEOS/deos_ws/src/perception/sensor_fusion/config/my_map.pcd
+  Check cloud topic: ros2 topic hz /cloud_all_fields_fullframe
+  Look at error: ros2 node info pcl_localization
+
+Navigation not starting:
+  Check /odom exists: ros2 topic hz /odom
+  Check /obstacles exists: ros2 topic list | grep obstacle
+  Set 2D Pose Estimate in RViz first
+
+Motors not responding:
+  Check /cmd_vel: ros2 topic hz /cmd_vel
+  Check motor connections (USB/Serial/GPIO)
+  Check motor driver power supply
+
+================================================================================
+RUN EVERYTHING AT ONCE (copy-paste)
+================================================================================
+
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+
+ros2 launch lidar sick_multiscan165.launch.py hostname:=10.10.10.211 > /tmp/t1.log 2>&1 &
+sleep 2
+ros2 run imu gps_node --ros-args -p port:=/dev/ttyUSB0 -p baudrate:=9600 > /tmp/t2.log 2>&1 &
+sleep 2
+ros2 topic relay /sick_scansegment_xd/imu /imu/data > /tmp/t3.log 2>&1 &
+sleep 2
+ros2 launch sensor_fusion sensorfus.launch.py > /tmp/t4.log 2>&1 &
+sleep 2
+ros2 launch pcl_localization_ros2 pcl_localization.launch.py > /tmp/t5.log 2>&1 &
+sleep 2
+ros2 launch perception obstacle_detection.launch.py > /tmp/t6.log 2>&1 &
+sleep 2
+ros2 launch planning local_navigation.launch.py > /tmp/t7.log 2>&1 &
+sleep 2
+ros2 launch control vehicle_controller.launch.py > /tmp/t8.log 2>&1 &
+
+echo "All systems started!"
+echo "Check: ros2 topic list"
+echo "Monitor: watch \"ros2 topic hz /odom /odometry/icp /cmd_vel\""
+
+================================================================================

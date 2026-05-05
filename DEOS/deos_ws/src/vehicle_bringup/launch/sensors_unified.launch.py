@@ -80,6 +80,7 @@ def generate_launch_description():
             'hostname': LaunchConfiguration('lidar_hostname'),
             'scanner_type': 'sick_multiscan',
             'frame_id': LaunchConfiguration('lidar_frame_id'),
+            'udp_receiver_ip': '10.10.10.210',
         }],
         output='screen',
         respawn=True,

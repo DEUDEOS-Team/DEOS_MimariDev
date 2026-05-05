@@ -1,0 +1,217 @@
+================================================================================
+FIX: PASS GPS USB DEVICE TO CONTAINER
+================================================================================
+
+PROBLEM: Container can't see /dev/ttyUSB* or /dev/ttyACM* devices
+REASON: Docker needs explicit permission to access USB devices
+
+SOLUTION: Two approaches:
+
+================================================================================
+APPROACH 1: RUN CONTAINER WITH DEVICE ACCESS (RECOMMENDED)
+================================================================================
+
+Step 1: Stop current container
+
+docker stop 5314f0ee8a6f
+
+Step 2: Find GPS device on HOST
+
+From Windows PowerShell:
+  wmic logicaldisk get name
+  (check COM ports)
+
+Or use Device Manager:
+  Ports (COM & LPT)
+  Find your GPS device (e.g., COM3, COM4, USB Serial Device)
+
+Let's assume GPS is on COM3
+
+Step 3: Map COM3 to container
+
+On Linux/Mac:
+  docker run --device=/dev/ttyUSB0:/dev/ttyUSB0 -it 5314f0ee8a6f bash
+
+On Windows with WSL2 (NOT Hyper-V):
+  The USB device must be forwarded through WSL first
+
+On Windows with Docker Desktop (Hyper-V):
+  USB passthrough requires Docker Desktop 4.0+ with special setup
+
+================================================================================
+APPROACH 2: USE TCP/IP INSTEAD OF SERIAL
+================================================================================
+
+Many GPS modules have USB-to-TCP bridge capability:
+
+If your GPS supports it:
+  1. Configure GPS to broadcast via TCP/IP (usually 10.0.0.1 or 192.168.x.x)
+  2. No USB needed
+  3. Pass network to container directly
+
+Example:
+  docker exec -it 5314f0ee8a6f bash -c "
+    source /opt/ros/jazzy/setup.bash
+    source /ros2_ws/install/setup.bash
+    ros2 run imu gps_node --ros-args -p port:=192.168.1.100 -p baudrate:=2947
+  "
+
+================================================================================
+APPROACH 3: USE MOCK GPS DATA (FOR TESTING)
+================================================================================
+
+If you just want to test the fusion system without real GPS:
+
+Create mock GPS publisher:
+
+docker exec -it 5314f0ee8a6f bash -c "
+  source /opt/ros/jazzy/setup.bash
+  source /ros2_ws/install/setup.bash
+  
+  ros2 topic pub /gps/fix sensor_msgs/NavSatFix '
+  {
+    header: {frame_id: \"gps_link\"},
+    latitude: 38.4267,
+    longitude: 26.1234,
+    altitude: 5.0,
+    position_covariance: [0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01],
+    position_covariance_type: 2
+  }' --rate 10
+"
+
+This publishes fake GPS data at 10 Hz
+Good for testing EKF + LiDAR IMU fusion
+
+================================================================================
+BEST SOLUTION: DOCKER RUN WITH DEVICE
+================================================================================
+
+To properly run container WITH GPS device access:
+
+Step 1: Find GPS device on HOST (Windows)
+
+Open Device Manager:
+  Ports (COM & LPT) → Find USB device (e.g., "USB Serial Device COM3")
+  
+Then map it when running docker.
+
+For Windows with WSL2:
+  
+  First, find the device path:
+    wsl -d Docker-Desktop -u root
+    lsusb
+    ls -la /dev/ttyUSB* /dev/ttyACM*
+    
+  Then run container with device mapping:
+    docker run --device=/dev/ttyUSB0:/dev/ttyUSB0 \
+               -it 5314f0ee8a6f bash
+
+Step 2: Stop the old container
+
+docker stop 5314f0ee8a6f
+docker rm 5314f0ee8a6f
+
+Step 3: Run new container with device access
+
+docker run --name deos \
+           --device=/dev/ttyUSB0:/dev/ttyUSB0 \
+           -p 2115:2115/udp \
+           -p 2111:2111/tcp \
+           -it complete_lidar bash
+
+Step 4: Inside container, verify GPS is visible
+
+ls -la /dev/ttyUSB0
+
+You should see the device now!
+
+Step 5: Run GPS node
+
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 run imu gps_node --ros-args -p port:=/dev/ttyUSB0 -p baudrate:=9600
+
+================================================================================
+DOCKER COMPOSE SOLUTION (EASIEST)
+================================================================================
+
+If the container has docker-compose.yml, edit it:
+
+Find: /ros2_ws/docker-compose.yml or /ros2_ws/src/docker-compose.yml
+
+Add devices section:
+
+services:
+  deos:
+    image: complete_lidar
+    container_name: deos
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/ttyUSB1:/dev/ttyUSB1
+      - /dev/ttyACM0:/dev/ttyACM0
+    ports:
+      - "2115:2115/udp"
+      - "2111:2111/tcp"
+    stdin_open: true
+    tty: true
+
+Then run:
+
+docker-compose up -d
+
+This automatically maps all USB devices!
+
+================================================================================
+IF GPS STILL NOT DETECTED
+================================================================================
+
+Troubleshooting:
+
+1. Verify GPS is connected to HOST:
+   Device Manager → Ports (COM & LPT)
+   Should show your GPS device
+
+2. Check baud rate:
+   Most GPS: 9600 baud
+   Some: 115200 baud
+   Check your GPS manual
+
+3. Check if driver installed:
+   Windows may need USB-to-Serial driver
+   Install from device manufacturer
+
+4. Try different approach:
+   Instead of /dev/ttyUSB0, try:
+   - /dev/ttyUSB1
+   - /dev/ttyACM0
+   - /dev/ttyACM1
+   - /dev/ttyS0
+
+5. If all else fails, use MOCK GPS for now:
+   docker exec -it 5314f0ee8a6f bash -c "
+     source /opt/ros/jazzy/setup.bash
+     source /ros2_ws/install/setup.bash
+     ros2 topic pub /gps/fix sensor_msgs/NavSatFix '{header: {frame_id: gps_link}, latitude: 38.4267, longitude: 26.1234, altitude: 5.0}' --rate 10
+   "
+
+   This lets you test EKF + LiDAR IMU without real GPS
+
+================================================================================
+NEXT STEP
+================================================================================
+
+Tell me:
+
+1. Your GPS device name (from Device Manager) - e.g., "COM3", "USB Serial Device"
+
+2. Once I know, I'll give you exact docker run command with device mapping
+
+OR
+
+3. If you want to test NOW without fixing GPS:
+   Use the MOCK GPS approach (Approach 3 above)
+   Then run complete fusion system with fake GPS data
+
+What would you prefer?
+
+================================================================================

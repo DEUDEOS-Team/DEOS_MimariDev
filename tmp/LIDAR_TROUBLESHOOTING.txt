@@ -1,0 +1,309 @@
+================================================================================
+LIDAR CONNECTION TROUBLESHOOTING - STEP BY STEP
+================================================================================
+
+ISSUE: "Waiting for LiDAR" - Not receiving data from 10.10.10.211
+
+DIAGNOSIS STEPS:
+
+================================================================================
+STEP 1: Check if LiDAR is actually reachable from HOST
+================================================================================
+
+From your Windows host (NOT in docker), try:
+
+Open Command Prompt and run:
+  ping 10.10.10.211
+
+If you get "Request timed out" or "Destination host unreachable":
+  - LiDAR is NOT connected to your network
+  - Check: Network cable from PC to LiDAR
+  - Check: LiDAR power is on
+  - Check: Both are on same network (10.10.10.x subnet)
+  - Check: No firewall blocking UDP/TCP
+
+If ping WORKS (replies received):
+  - LiDAR is reachable - proceed to STEP 2
+
+================================================================================
+STEP 2: Check if container can reach LiDAR
+================================================================================
+
+Run in docker (will show if container has network access):
+
+docker exec 6403462142d4 bash -c "
+  for i in {1..5}; do
+    timeout 1 bash -c '</dev/tcp/10.10.10.211/2115' 2>&1
+    echo 'Connection attempt '$i
+    sleep 1
+  done
+"
+
+Expected: Either connects or times out quickly (not hangs)
+If hangs: Container network is blocked
+
+Alternative check (more basic):
+docker exec 6403462142d4 bash -c "
+  timeout 5 bash -c 'cat < /dev/tcp/10.10.10.211/2115' 2>&1
+"
+
+================================================================================
+STEP 3: Check sick_scan_xd driver parameters
+================================================================================
+
+The issue might be missing parameters. Check what the driver needs:
+
+docker exec 6403462142d4 bash -c "
+  source /opt/ros/jazzy/setup.bash
+  ros2 run sick_scan_xd sick_generic_caller --help 2>&1 | head -50
+"
+
+Or check package documentation:
+docker exec 6403462142d4 bash -c "
+  source /opt/ros/jazzy/setup.bash
+  ros2 interface show sick_scan_xd 2>&1 || echo 'Interface not found'
+"
+
+================================================================================
+STEP 4: Try MINIMAL launch (just LiDAR, no other sensors)
+================================================================================
+
+docker exec -it 6403462142d4 bash -c "
+  source /opt/ros/jazzy/setup.bash
+  source /ros2_ws/install/setup.bash
+  ros2 launch sick_scan_xd sick_multiscan.launch.py hostname:=10.10.10.211
+"
+
+This is simpler than sensors_unified. If this works, issue is elsewhere.
+If this hangs, it's the sick_scan_xd driver or network.
+
+================================================================================
+STEP 5: Check if SICK Multiscan165 needs special config
+================================================================================
+
+SICK Multiscan165 might need additional parameters:
+
+Try with more parameters:
+
+docker exec -it 6403462142d4 bash -c "
+  source /opt/ros/jazzy/setup.bash
+  source /ros2_ws/install/setup.bash
+  ros2 launch vehicle_bringup sensors_unified.launch.py \\
+    lidar_hostname:=10.10.10.211 \\
+    enable_camera:=false \\
+    enable_imu:=false \\
+    enable_gps:=false
+"
+
+(Disable other sensors to isolate the problem)
+
+================================================================================
+STEP 6: Check LiDAR IP Configuration
+================================================================================
+
+SICK devices sometimes need specific network settings:
+
+1. Your LiDAR might need different IP config:
+
+Try default factory IP:
+docker exec -it 6403462142d4 bash -c "
+  source /opt/ros/jazzy/setup.bash
+  source /ros2_ws/install/setup.bash
+  ros2 launch vehicle_bringup sensors_unified.launch.py \\
+    lidar_hostname:=192.168.0.1
+"
+
+2. Or try 10.10.10.1 (different gateway):
+docker exec -it 6403462142d4 bash -c "
+  source /opt/ros/jazzy/setup.bash
+  source /ros2_ws/install/setup.bash
+  ros2 launch vehicle_bringup sensors_unified.launch.py \\
+    lidar_hostname:=10.10.10.1
+"
+
+3. Or try 10.10.10.100:
+docker exec -it 6403462142d4 bash -c "
+  source /opt/ros/jazzy/setup.bash
+  source /ros2_ws/install/setup.bash
+  ros2 launch vehicle_bringup sensors_unified.launch.py \\
+    lidar_hostname:=10.10.10.100
+"
+
+================================================================================
+STEP 7: Check sick_scan_xd driver needs binary protocol
+================================================================================
+
+The lidarfilters.launch shows a parameter:
+
+'use_binary_protocol': True
+
+Maybe the driver needs this. Check if sensors_unified includes it:
+
+Try adding to launch command:
+
+docker exec -it 6403462142d4 bash -c "
+  source /opt/ros/jazzy/setup.bash
+  source /ros2_ws/install/setup.bash
+  
+  # Create temporary launch file with binary protocol
+  cat > /tmp/test_lidar.launch.py << 'PYEOF'
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    return LaunchDescription([
+        Node(
+            package='sick_scan_xd',
+            executable='sick_generic_caller',
+            name='sick_multiscan165',
+            parameters=[{
+                'hostname': '10.10.10.211',
+                'scanner_type': 'sick_multiscan165',
+                'frame_id': 'laser',
+                'use_binary_protocol': True,
+                'skip_zero_scans': True,
+            }],
+            output='screen',
+        )
+    ])
+PYEOF
+  
+  ros2 launch /tmp/test_lidar.launch.py
+"
+
+================================================================================
+STEP 8: Check UDP vs TCP Connection
+================================================================================
+
+SICK Multiscan165 might use UDP instead of TCP:
+
+docker exec -it 6403462142d4 bash -c "
+  source /opt/ros/jazzy/setup.bash
+  source /ros2_ws/install/setup.bash
+  
+  cat > /tmp/test_lidar_udp.launch.py << 'PYEOF'
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    return LaunchDescription([
+        Node(
+            package='sick_scan_xd',
+            executable='sick_generic_caller',
+            name='sick_multiscan165',
+            parameters=[{
+                'hostname': '10.10.10.211',
+                'scanner_type': 'sick_multiscan165',
+                'frame_id': 'laser',
+                'port': 2115,                    # TCP port (default)
+                'udp_receiver_ip': '0.0.0.0',    # Listen on all interfaces
+                'udp_receiver_port': 2115,       # UDP fallback
+            }],
+            output='screen',
+        )
+    ])
+PYEOF
+  
+  ros2 launch /tmp/test_lidar_udp.launch.py
+"
+
+================================================================================
+STEP 9: Check if SICK device responds at all
+================================================================================
+
+Try to telnet to the device (if telnet available):
+
+docker exec 6403462142d4 bash -c "
+  which telnet || apt-get install -y telnet
+  telnet 10.10.10.211 2115
+  (press Ctrl+C after 5 seconds if it hangs)
+"
+
+This tells you if the device is listening on that port.
+
+================================================================================
+STEP 10: Check sick_scan_xd debug logging
+================================================================================
+
+Run with debug output to see what's happening:
+
+docker exec -it 6403462142d4 bash -c "
+  source /opt/ros/jazzy/setup.bash
+  source /ros2_ws/install/setup.bash
+  
+  ROS_LOG_LEVEL=debug ros2 launch vehicle_bringup sensors_unified.launch.py \\
+    lidar_hostname:=10.10.10.211
+"
+
+This will show detailed logs about what the driver is doing.
+
+================================================================================
+QUICK DIAGNOSTIC SUMMARY
+================================================================================
+
+Run this sequence to identify the problem:
+
+1. From HOST Windows:
+   ping 10.10.10.211
+   (Does it respond?)
+
+2. If YES → Try different IPs:
+   docker exec -it 6403462142d4 bash -c "source /opt/ros/jazzy/setup.bash && source /ros2_ws/install/setup.bash && ros2 launch vehicle_bringup sensors_unified.launch.py lidar_hostname:=192.168.0.1"
+
+3. If still hangs → Try factory defaults:
+   docker exec -it 6403462142d4 bash -c "source /opt/ros/jazzy/setup.bash && source /ros2_ws/install/setup.bash && ros2 launch vehicle_bringup sensors_unified.launch.py lidar_hostname:=10.10.10.1"
+
+4. If still hangs → Debug logs:
+   docker exec -it 6403462142d4 bash -c "source /opt/ros/jazzy/setup.bash && source /ros2_ws/install/setup.bash && ROS_LOG_LEVEL=debug ros2 launch vehicle_bringup sensors_unified.launch.py lidar_hostname:=10.10.10.211"
+
+5. Last resort → Check if SICK device is in different mode:
+   - May need to factory reset LiDAR
+   - May need different protocol
+   - May need configuration via SICK firmware utility
+
+================================================================================
+COMMON ISSUES & FIXES
+================================================================================
+
+ISSUE: "Connection refused" to 10.10.10.211
+FIX: Try 192.168.0.1 (factory default IP)
+
+ISSUE: "Network unreachable"
+FIX: Device is on different subnet - change your host IP range
+
+ISSUE: "Times out after 30 seconds"
+FIX: Device is responding but not sick_scan_xd protocol - try different scanner_type
+
+ISSUE: Device appears in ping but won't work with sick_scan_xd
+FIX: 
+  - Device may be in configuration mode
+  - Try factory reset
+  - Check device is set to "Continuous mode" (not triggered)
+  - Verify binary protocol is enabled
+
+ISSUE: Data comes in bursts then stops
+FIX: Device disconnecting - may need heavier cable or power supply
+
+ISSUE: "scanner_type not recognized"
+FIX: Check if it's actually sick_multiscan165 or sick_multiscan (without 165)
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+Tell me the output of:
+
+1. From HOST Windows:
+   Does "ping 10.10.10.211" work? (YES/NO + what response)
+
+2. From docker terminal with debug:
+   docker exec -it 6403462142d4 bash -c "source /opt/ros/jazzy/setup.bash && source /ros2_ws/install/setup.bash && ROS_LOG_LEVEL=debug ros2 launch vehicle_bringup sensors_unified.launch.py lidar_hostname:=10.10.10.211 2>&1 | head -100"
+   
+   (What is the LAST error message before it hangs?)
+
+3. Device name/model from SICK device documentation
+   (Is it definitely sick_multiscan165 or something else?)
+
+With this info I can give you exact fix.
+
+================================================================================
