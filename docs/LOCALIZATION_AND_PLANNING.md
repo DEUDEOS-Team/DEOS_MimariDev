@@ -171,6 +171,7 @@ Bu, “tam bir graph-based replanning” değildir; amaç, tabelayı görmezden 
   - `/perception/has_steering_override` (`std_msgs/Bool`)
   - `/perception/park_complete` (`std_msgs/Bool`)
   - `/perception/turn_permissions` (`std_msgs/String`, JSON)
+  - (içsel) `DecisionArbiter`: tüm kararları öncelik tablosuyla birleştirir
 
 ### 4.2 Engel bazlı lokal “yeniden yönelim”
 
@@ -178,8 +179,23 @@ Bu, “tam bir graph-based replanning” değildir; amaç, tabelayı görmezden 
   - statik engelde `suggest_lane_change=True` + `avoidance_direction` üretir
   - yol kapalı durumunda `road_blocked=True`
 - `perception_fusion_node`:
-  - `suggest_lane_change=True` ise küçük bir direksiyon bias’ı ile override üretir
-  - `road_blocked=True` ise `speed_cap=0` ile güvenli durdurur (global replanning gerektirir)
+  - kararlar `DecisionArbiter` ile birleştirilir (stop/speed/steer override)
+  - `suggest_lane_change=True` ise “static_avoid” adayı üretilir
+  - `road_blocked=True` ise hard-stop adayı üretilir
+
+### 4.2.1 Şerit dışına çıkmama kuralı (kaçınma sırasında)
+
+Şartnameye göre engelden sakınırken de şerit ihlali riski vardır. Bu nedenle:
+
+- `/lane_walls` topic’i taze değilse ve `require_lane_walls_for_avoidance=True` ise **engel kaçınma steer override’ı devreye alınmaz**.
+- `/lane_walls` tazeyse, `lane_bounds_*` parametreleri ile pointcloud’dan basit sol/sağ sınırlar çıkarılır (`LaneBounds`) ve **kaçınma steer’i lane içinde kalacak şekilde clamp edilir**.
+
+İlgili parametreler (`perception_fusion_node`):
+
+- `lane_walls_topic` (default `/lane_walls`)
+- `require_lane_walls_for_avoidance` (default `True`)
+- `lane_bounds_x_min_m`, `lane_bounds_x_max_m`, `lane_bounds_z_max_m`
+- `lane_bounds_min_points`, `lane_bounds_margin_m`
 
 ### 4.3 Park modu (slot seçimi + manevra)
 

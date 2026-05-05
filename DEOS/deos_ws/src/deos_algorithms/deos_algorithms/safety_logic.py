@@ -276,7 +276,6 @@ class SafetyLogic:
                 reason=f"SOFT_SLOW: {det.class_name} at {eff:.1f}m",
             )
         return SafetyDecision.safe()
-
 """
 safety_logic.py
 ---------------
@@ -625,4 +624,3 @@ class SafetyLogic:
                 reason=f"SOFT_SLOW: {det.class_name} at {eff:.1f}m",
             )
         return SafetyDecision.safe()
-

@@ -44,6 +44,14 @@ class MissionManager:
         is_park_entry = task == TaskType.PARK_ENTRY
         is_park_task = task == TaskType.PARK
 
+        # Normal waypoint ilerletme:
+        # - START/CHECKPOINT/STOP gibi noktalarda arrived=True ise bir sonraki waypoint'e geç.
+        # - PARK_ENTRY/PARK arrived ise park modu başlayacağı için burada advance ETME.
+        # - HOLD task'lar kendi içinde (15s) advance eder.
+        if state.arrived and not is_hold_task and not self._park_active and not (is_park_entry or is_park_task):
+            self.wp.advance()
+            return self.wp.update(pos), dec
+
         # Park modunu, park giriş noktasına varınca başlat (şartname: park_giris sadece giriş tetikleyicisidir)
         if (is_park_entry or is_park_task) and state.arrived and not self._park_active:
             self._park_active = True
