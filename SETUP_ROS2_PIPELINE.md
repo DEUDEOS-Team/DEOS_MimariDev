@@ -18,6 +18,7 @@ repoya eklenen node/paketlerle **çalışır pipeline** kurulumunu özetler.
 - **Control**: `vehicle_controller`
   - `vehicle_controller_node` → `/cmd_vel` + `/safety/emergency_stop`
     - `/perception/emergency_stop` **false → true** yükselen kenarında `/safety/emergency_stop` üzerinde **sınırlı sayıda** `True` pulse yayınlanır (default: 3; parametre: `safety_emergency_stop_pulse_count`).
+    - Opsiyonel: doğrudan `/hardware/motion_enable` ile **çift kilit** (`subscribe_hardware_motion_enable`, varsayılan `true`; perception ile aynı timeout/fail-safe parametreleri).
     - Acil durum / perception timeout sırasında default olarak **`/cmd_vel` publish edilmez** (parametre: `publish_cmd_vel_in_emergency`, default `false`).
     - Acil durumdan çıkışta (opsiyonel) bir kez `/safety/emergency_stop=false` yayınlanabilir (parametre: `publish_safety_emergency_stop_false_on_clear`, default `true`).
 
@@ -28,6 +29,7 @@ Ana launch: `DEOS/deos_ws/src/vehicle_bringup/launch/main.launch.py`
 - `mission_file` parametresi:
   - boşsa waypoint takibi pasif
   - doluysa GeoJSON görev dosyasından takip başlar
+- `hardware_motion_enable_topic` (default `/hardware/motion_enable`) ve `hardware_motion_enable_timeout_s` (default `0.5`) — `perception_fusion_node` + `vehicle_controller_node` ile uyumlu
 
 Örnek:
 
@@ -92,6 +94,29 @@ Anlamı: belirli süre STM32’den mesaj gelmezse Pi **DUR** kabul eder.
 ```bash
 ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: false}" -1
 ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: true}" -1
+```
+
+Doğrulama (pipeline açıkken, başka bir terminalde):
+
+1. **DUR** (`data: false`) sonrası kısa süre içinde:
+   - `ros2 topic echo /perception/emergency_stop --once` → `data: true`
+   - `ros2 topic echo /perception/speed_cap --once` → yaklaşık `0.0`
+   - `ros2 topic echo /cmd_vel --once` → genelde publish yok veya `linear.x` ~0 (`publish_cmd_vel_in_emergency` kapalıysa)
+   - `ros2 topic echo /safety/emergency_stop` → kısa `True` pulse’lar (yükselen kenara bağlı; spam yok)
+2. **DEVAM** (`data: true`) sonrası (sensör/algı akışı normal ise):
+   - `/perception/emergency_stop` risk durumuna göre `false` olabilir
+   - `/cmd_vel` tekrar üretilebilir
+3. **Hiç mesaj yok** (olay bazlı; keepalive yok): ~`hardware_motion_enable_timeout_s` (varsayılan `0.5` s) sonra Pi **DUR** kabul eder (fail-safe açıksa).
+
+`vehicle_controller_node` içinde **opsiyonel çift kilit**: varsayılan olarak aynı `/hardware/motion_enable` topic’i dinlenir (`subscribe_hardware_motion_enable`, varsayılan `true`). Perception çökse bile STM32 **DUR** iken `/cmd_vel` tutulur.
+
+Launch ile topic / timeout override:
+
+```bash
+ros2 launch vehicle_bringup main.launch.py \
+  mission_file:=/path/rota.geojson \
+  hardware_motion_enable_topic:=/hardware/motion_enable \
+  hardware_motion_enable_timeout_s:=0.5
 ```
 
 ### 5) Topic haritası (hızlı kontrol)

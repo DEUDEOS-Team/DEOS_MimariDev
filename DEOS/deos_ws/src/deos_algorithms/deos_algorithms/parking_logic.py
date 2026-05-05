@@ -2,6 +2,16 @@
 parking_logic.py
 ----------------
 Park etme manevrasını yöneten durum makinesi.
+
+GeoJSON ile araç park alanına geldikten sonra yan yana slotlar görülebilir; her slot
+tabela ile ayrılır: **park yeri** (`SignClass.PARKING_AREA`) veya **park yasak**
+(`SignClass.NO_PARKING`). Sadece ``parking_allowed=True`` olan adaylar seçilir;
+``False`` olanlar (yasak tabela) asla manevra hedefi olmaz. ``None`` (tabela bilgisi
+yok) güvenli tarafta parka kalkılmaz.
+
+Görüntü modeli slot kutusu + tabela sınıfını birleştirip ``ParkingDetection.parking_allowed``
+alanını doldurmalıdır; ROS tarafında ``perception_fusion.parking_detections_from_signs``
+ile yalnızca tabela tespitleri de aday listesine dönüştürülebilir.
 """
 
 from __future__ import annotations
@@ -48,6 +58,8 @@ class ParkingDetection:
     bbox_px: tuple[float, float, float, float]
     confidence: float
     park_type: str = ParkType.PERPENDICULAR
+    # True: park yeri tabelası / izinli slot; False: park yasak tabelası; None: belirsiz → kullanılmaz
+    parking_allowed: bool | None = None
 
 
 @dataclass
@@ -60,6 +72,8 @@ class ParkState:
     lateral_m: Optional[float] = None
     complete: bool = False
     reason: str = ""
+    # Uygun (izinli) aday yokken yalnızca park yasak / belirsiz tespit varsa True olabilir
+    no_eligible_spot: bool = False
 
 
 class ParkingLogic:
@@ -69,10 +83,11 @@ class ParkingLogic:
 
     def update(self, detections: list[ParkingDetection]) -> ParkState:
         valid = [d for d in detections if d.confidence >= MIN_CONFIDENCE]
-        if not valid:
-            return self._no_spot()
+        eligible = [d for d in valid if d.parking_allowed is True]
+        if not eligible:
+            return self._no_eligible_spot(valid)
 
-        spot = max(valid, key=lambda d: d.bbox_px[3])
+        spot = max(eligible, key=lambda d: d.bbox_px[3])
         dist = self._estimate_distance(spot)
         lateral = self._estimate_lateral(spot, dist) if dist is not None else None
 
@@ -179,10 +194,30 @@ class ParkingLogic:
         du = x_center - (IMAGE_WIDTH_PX / 2.0)
         return -(du * distance) / CAMERA_FOCAL_PX
 
-    def _no_spot(self) -> ParkState:
+    def _no_eligible_spot(self, valid: list[ParkingDetection]) -> ParkState:
         if self._phase == ParkPhase.PARKED:
             return ParkState(phase=ParkPhase.PARKED, complete=True, reason="park tamamlandı")
-        return ParkState(phase=self._phase, reason="park yeri tespit edilmedi")
+        if not valid:
+            return ParkState(phase=self._phase, reason="park yeri tespit edilmedi")
+        forbidden = [d for d in valid if d.parking_allowed is False]
+        unknown = [d for d in valid if d.parking_allowed is None]
+        if forbidden and not unknown:
+            return ParkState(
+                phase=self._phase,
+                reason="park yasak tabelası: bu slotta manevra yapılmıyor",
+                no_eligible_spot=True,
+            )
+        if unknown and not forbidden:
+            return ParkState(
+                phase=self._phase,
+                reason="park tabelası sınıfı yok: izinli slot seçilemiyor",
+                no_eligible_spot=True,
+            )
+        return ParkState(
+            phase=self._phase,
+            reason="uygun park yeri (izinli) tespit edilmedi",
+            no_eligible_spot=True,
+        )
 
     def _reset(self) -> None:
         self._phase = ParkPhase.WAITING

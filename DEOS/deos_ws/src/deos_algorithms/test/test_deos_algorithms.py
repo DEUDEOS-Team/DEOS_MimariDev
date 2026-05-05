@@ -176,3 +176,116 @@ def test_perception_fusion_kisa_senaryo():
     assert len(frame.obstacle_dets) == 2, "Koni + lidar engeli -> iki engel bekleniyor."
     assert frame.imu is not None and frame.imu.heading_deg == 10.0, "IMU bilgisi aynen taşınmalı."
 
+
+def test_parking_detections_from_signs():
+    """Park / park yasak tabelaları ParkingDetection listesine ayrışmalı."""
+    from deos_algorithms.perception_fusion import parking_detections_from_signs
+    from deos_algorithms.traffic_sign_logic import SignClass, SignDetection
+
+    signs = [
+        SignDetection(class_name=SignClass.PARKING_AREA, confidence=0.9, bbox_px=(0, 0, 10, 20)),
+        SignDetection(class_name=SignClass.NO_PARKING, confidence=0.85, bbox_px=(5, 5, 15, 25)),
+    ]
+    dets = parking_detections_from_signs(signs)
+    assert len(dets) == 2
+    assert dets[0].parking_allowed is True
+    assert dets[1].parking_allowed is False
+
+
+def test_parking_only_allows_parking_sign_spot():
+    """Yalnızca parking_allowed=True adaylar manevra hedefi olur; yasak slotta ilerleme yok."""
+    from deos_algorithms.parking_logic import ParkingDetection, ParkingLogic, ParkPhase
+
+    logic = ParkingLogic()
+    banned = ParkingDetection(bbox_px=(400, 100, 900, 900), confidence=0.95, parking_allowed=False)
+    st = logic.update([banned])
+    assert st.phase == ParkPhase.WAITING
+    assert st.no_eligible_spot is True
+    assert "yasak" in st.reason.lower()
+
+
+def test_parking_prefers_allowed_over_closer_forbidden():
+    """Yasak slot kameraya daha yakın olsa bile izinli slot seçilmeli."""
+    from deos_algorithms.parking_logic import ParkingDetection, ParkingLogic, ParkPhase
+
+    logic = ParkingLogic()
+    # y2 büyük = daha yakın; yasak daha yakın
+    banned = ParkingDetection(bbox_px=(100, 100, 200, 1100), confidence=0.95, parking_allowed=False)
+    allowed = ParkingDetection(bbox_px=(500, 100, 780, 500), confidence=0.95, parking_allowed=True)
+    st = logic.update([banned, allowed])
+    assert st.phase == ParkPhase.APPROACHING
+    assert st.distance_m == pytest.approx(6.0, rel=0, abs=0.05)
+
+
+def _confirm_light(logic, det, now0: float, frames: int = 2, **kwargs):
+    st = None
+    for i in range(frames):
+        st = logic.update([det], now=now0 + i * 0.1, **kwargs)
+    return st
+
+
+def test_traffic_light_yellow_ilkgorus_yavaslama():
+    """İlk görünen sarı: yavaşlama (prepare_to_stop), tam hız yok."""
+    from deos_algorithms.traffic_light_logic import LightColor, LightDetection, TrafficLightLogic
+
+    logic = TrafficLightLogic()
+    y = LightDetection(color=LightColor.YELLOW, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=15.0)
+    st = _confirm_light(logic, y, 1000.0)
+    assert st is not None
+    assert st.prepare_to_stop is True
+    assert st.prepare_to_move is False
+    assert st.can_go is False
+    assert st.speed_cap_ratio == pytest.approx(0.4)
+
+
+def test_traffic_light_yellow_duruyorken_tavan_sifir():
+    """Sarıda anlık hız ~0 verilirse durmaya devam (hız tavanı 0)."""
+    from deos_algorithms.traffic_light_logic import LightColor, LightDetection, TrafficLightLogic
+
+    logic = TrafficLightLogic()
+    y = LightDetection(color=LightColor.YELLOW, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=10.0)
+    st = _confirm_light(logic, y, 2000.0, vehicle_speed_mps=0.0)
+    assert st.speed_cap_ratio == pytest.approx(0.0)
+
+
+def test_traffic_light_kirmizi_sonra_sari_hazirlik():
+    """Kırmızı onayından sonra sarı: harekete hazırlık (prepare_to_move), dur zorunluluğu yok."""
+    from deos_algorithms.traffic_light_logic import LightColor, LightDetection, TrafficLightLogic
+
+    logic = TrafficLightLogic()
+    r = LightDetection(color=LightColor.RED, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=12.0)
+    y = LightDetection(color=LightColor.YELLOW, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=8.0)
+    _confirm_light(logic, r, 3000.0)
+    st = _confirm_light(logic, y, 3001.0)
+    assert st.must_stop is False
+    assert st.prepare_to_move is True
+    assert st.prepare_to_stop is False
+    assert st.speed_cap_ratio == pytest.approx(0.25)
+
+
+def test_traffic_light_kirmizi_sonra_sari_duruyorken_sifir():
+    """Kırmızı→sarı hazırlıkta da araç duruyorsa tavan 0 kalmalı."""
+    from deos_algorithms.traffic_light_logic import LightColor, LightDetection, TrafficLightLogic
+
+    logic = TrafficLightLogic()
+    r = LightDetection(color=LightColor.RED, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=12.0)
+    y = LightDetection(color=LightColor.YELLOW, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=8.0)
+    _confirm_light(logic, r, 4000.0)
+    st = _confirm_light(logic, y, 4001.0, vehicle_speed_mps=0.02)
+    assert st.prepare_to_move is True
+    assert st.speed_cap_ratio == pytest.approx(0.0)
+
+
+def test_traffic_light_yesil_sonra_sari_yavaslama():
+    """Yeşilden sonra sarı: yine yavaşlama dalı (prepare_to_stop), hazırlık dalı değil."""
+    from deos_algorithms.traffic_light_logic import LightColor, LightDetection, TrafficLightLogic
+
+    logic = TrafficLightLogic()
+    g = LightDetection(color=LightColor.GREEN, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=20.0)
+    y = LightDetection(color=LightColor.YELLOW, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=10.0)
+    _confirm_light(logic, g, 5000.0)
+    st = _confirm_light(logic, y, 5001.0)
+    assert st.prepare_to_stop is True
+    assert st.prepare_to_move is False
+    assert st.speed_cap_ratio == pytest.approx(0.4)
+

@@ -1,5 +1,6 @@
 import math
 import time
+import json
 
 import rclpy
 from rclpy.node import Node
@@ -14,6 +15,7 @@ from deos_algorithms.waypoint_manager import GpsPosition
 GPS_TIMEOUT_SLOW_S = 2.0
 GPS_TIMEOUT_STOP_S = 5.0
 SPEED_DECAY_PER_SEC = 0.2
+TURN_RULE_APPLY_DISTANCE_M = 8.0
 
 
 class MissionPlanningNode(Node):
@@ -41,16 +43,75 @@ class MissionPlanningNode(Node):
         self._last_steering = 0.0
         self._last_speed = 0.0
         self._last_task = ""
+        self._turn_perm: dict | None = None
 
         self.create_subscription(NavSatFix, "/gps/fix", self._gps_cb, 10)
         self.create_subscription(Imu, "/imu/data", self._imu_cb, 10)
+        self.create_subscription(String, "/perception/turn_permissions", self._turn_perm_cb, 10)
 
         self._pub_steer = self.create_publisher(Float32, "/planning/steering_ref", 10)
         self._pub_speed = self.create_publisher(Float32, "/planning/speed_limit", 10)
         self._pub_task = self.create_publisher(String, "/planning/current_task", 10)
         self._pub_arrived = self.create_publisher(Bool, "/planning/arrived", 10)
+        self._pub_park_mode = self.create_publisher(Bool, "/planning/park_mode", 10)
+        self._pub_park_remaining = self.create_publisher(Float32, "/planning/park_remaining_s", 10)
+
+        # Park tamamlandı sinyali (perception) — park girişinden sonra 3dk içinde park etmek için
+        self.create_subscription(Bool, "/perception/park_complete", self._park_complete_cb, 10)
 
         self.create_timer(0.2, self._tick_timeout)  # 5 Hz
+
+    def _park_complete_cb(self, msg: Bool) -> None:
+        if self._manager is None:
+            return
+        if bool(msg.data):
+            self._manager.notify_park_completed()
+
+    def _turn_perm_cb(self, msg: String) -> None:
+        try:
+            self._turn_perm = json.loads(msg.data) if msg.data else None
+        except Exception:
+            self._turn_perm = None
+
+    def _apply_turn_permissions(self, steer: float, dist_to_wp_m: float) -> tuple[float, float]:
+        """
+        Tabela bazlı dönüş kısıtlarını waypoint'e yaklaşırken steer/speed üzerinde uygula.
+        Çıktı: (steer, speed_multiplier)
+        """
+        if self._turn_perm is None:
+            return steer, 1.0
+        if dist_to_wp_m > TURN_RULE_APPLY_DISTANCE_M:
+            return steer, 1.0
+
+        forced = self._turn_perm.get("forced_direction")
+        left_ok = bool(self._turn_perm.get("left", True))
+        straight_ok = bool(self._turn_perm.get("straight", True))
+        right_ok = bool(self._turn_perm.get("right", True))
+
+        # forced_direction: left/right/straight/pass_left/pass_right/roundabout
+        if forced == "left":
+            return min(steer, -0.6), 0.7
+        if forced == "right":
+            return max(steer, 0.6), 0.7
+        if forced == "straight":
+            return 0.0, 0.7
+        if forced == "pass_left":
+            return min(steer, -0.35), 0.8
+        if forced == "pass_right":
+            return max(steer, 0.35), 0.8
+        if forced == "roundabout":
+            # Basit yaklaşım: hız düşür, steer'i sınırlama (roundabout için özel planner gerekebilir)
+            return steer, 0.6
+
+        # Yasak dönüşleri “yumuşak” şekilde engelle (tam replanning yok; güvenli yavaşlama)
+        if not left_ok and steer < -0.2:
+            return 0.0, 0.6
+        if not right_ok and steer > 0.2:
+            return 0.0, 0.6
+        if not straight_ok and abs(steer) < 0.2:
+            return (0.35 if right_ok else (-0.35 if left_ok else 0.0)), 0.6
+
+        return steer, 1.0
 
     def _imu_cb(self, msg: Imu) -> None:
         q = msg.orientation
@@ -71,13 +132,15 @@ class MissionPlanningNode(Node):
 
         steer = float(wp_state.steering_ref)
         base_speed = float(wp_state.speed_limit_ratio) * float(mission_dec.speed_cap_ratio)
+        steer, turn_speed_mul = self._apply_turn_permissions(steer, float(wp_state.distance_to_wp_m))
+        base_speed *= float(turn_speed_mul)
         speed = self._apply_gps_timeout(base_speed)
 
         self._last_steering = steer
         self._last_speed = speed
         self._last_task = str(wp_state.current_task or "")
 
-        self._publish(steer, speed, self._last_task, bool(wp_state.arrived))
+        self._publish(steer, speed, self._last_task, bool(wp_state.arrived), mission_dec.park_mode, mission_dec.park_remaining_s)
 
     def _gps_age_s(self) -> float:
         if self._gps_stamp == 0.0:
@@ -97,13 +160,15 @@ class MissionPlanningNode(Node):
         # GPS yoksa da son değerleri yayınlayalım (controller tarafında stabil kalır)
         if self._manager is None:
             return
-        self._publish(self._last_steering, self._last_speed, self._last_task, False)
+        self._publish(self._last_steering, self._last_speed, self._last_task, False, False, 0.0)
 
-    def _publish(self, steer: float, speed: float, task: str, arrived: bool) -> None:
+    def _publish(self, steer: float, speed: float, task: str, arrived: bool, park_mode: bool, park_remaining_s: float) -> None:
         self._pub_steer.publish(Float32(data=float(steer)))
         self._pub_speed.publish(Float32(data=float(speed)))
         self._pub_task.publish(String(data=str(task)))
         self._pub_arrived.publish(Bool(data=bool(arrived)))
+        self._pub_park_mode.publish(Bool(data=bool(park_mode)))
+        self._pub_park_remaining.publish(Float32(data=float(park_remaining_s)))
 
 
 def main(args=None):

@@ -37,6 +37,7 @@ from deos_algorithms.traffic_light_logic import (  # noqa: E402
     LightColor,
     LightDetection,
     TrafficLightLogic,
+    TrafficLightState,
 )
 from deos_algorithms.traffic_sign_logic import SignClass, SignDetection, TrafficSignLogic  # noqa: E402
 from deos_algorithms.waypoint_manager import GpsPosition, WaypointManager  # noqa: E402
@@ -153,6 +154,7 @@ def print_glossary() -> None:
     print(" - distance_m: park alanına tahmini mesafe (bbox tabanlı)")
     print(" - lateral_m: park alanına yatay sapma (m)")
     print(" - complete: park tamamlandı mı")
+    print(" - no_eligible_spot: izinli (park) tabelası olan aday yok")
 
     print("\nTrafficSignLogic")
     print(" - must_stop_soon: STOP/NO_ENTRY gibi işaretlerden doğan 'dur' zorunluluğu")
@@ -162,7 +164,8 @@ def print_glossary() -> None:
 
     print("\nTrafficLightLogic")
     print(" - must_stop: kırmızı -> dur")
-    print(" - prepare_to_stop: sarı -> yavaşla ve durmaya hazırlan")
+    print(" - prepare_to_stop: sarı (yeşilden sonra / ilk sarı) -> yavaşlama")
+    print(" - prepare_to_move: sarı (kırmızıdan sonra) -> harekete hazırlık")
     print(" - can_go: yeşil -> geç")
     print(" - active_color: red/yellow/green")
     print(" - last_distance_m: ışığa tahmini mesafe")
@@ -322,11 +325,11 @@ def main() -> None:
     # --- ParkingLogic ---
     park = ParkingLogic()
     # distance ~6m: dy=1.2*700/6=140 => y2=500
-    det_far = ParkingDetection(bbox_px=(500, 100, 780, 500), confidence=0.95)
+    det_far = ParkingDetection(bbox_px=(500, 100, 780, 500), confidence=0.95, parking_allowed=True)
     # distance ~2.5m: dy=1.2*700/2.5=336 => y2=696
-    det_mid = ParkingDetection(bbox_px=(500, 100, 780, 696), confidence=0.95)
+    det_mid = ParkingDetection(bbox_px=(500, 100, 780, 696), confidence=0.95, parking_allowed=True)
     # distance ~1.0m: dy=840 => y2=1200
-    det_close = ParkingDetection(bbox_px=(500, 100, 780, 1200), confidence=0.95)
+    det_close = ParkingDetection(bbox_px=(500, 100, 780, 1200), confidence=0.95, parking_allowed=True)
 
     total += 1
     passed += case(
@@ -500,12 +503,17 @@ def main() -> None:
         )
 
     # --- TrafficLightLogic ---
-    def run_light_confirmed(color: str, *, distance_m: float | None = 15.0) -> TrafficLightState:
+    def run_light_confirmed(
+        color: str,
+        *,
+        distance_m: float | None = 15.0,
+        vehicle_speed_mps: float | None = None,
+    ) -> TrafficLightState:
         logic = TrafficLightLogic()
         det = LightDetection(color=color, confidence=0.9, bbox_px=(0, 0, 10, 10), estimated_distance_m=distance_m)
         now0 = 2000.0
-        st = logic.update([det], now=now0)
-        st = logic.update([det], now=now0 + 0.1)  # CONFIRM_FRAMES=2
+        st = logic.update([det], now=now0, vehicle_speed_mps=vehicle_speed_mps)
+        st = logic.update([det], now=now0 + 0.1, vehicle_speed_mps=vehicle_speed_mps)  # CONFIRM_FRAMES=2
         return st
 
     total += 1
@@ -521,21 +529,71 @@ def main() -> None:
     total += 1
     passed += case(
         algo="Trafik ışığı (TrafficLightLogic)",
-        name="TR: SARI (uzak) — durmaya hazırlan",
-        desc="Sarı ışık uzaksa (mesafe > 12m) prepare_to_stop=True ve speed_cap_ratio=YELLOW_SPEED_RATIO beklenir.",
+        name="TR: SARI (ilk / yeşilden önce) — yavaşlama",
+        desc="İlk görünen sarı veya yeşilden sonra sarı: prepare_to_stop=True ve YELLOW_SPEED_RATIO.",
         run=lambda: run_light_confirmed(LightColor.YELLOW, distance_m=20.0),
-        expect={"prepare_to_stop": True, "speed_cap_ratio": 0.4, "active_color": LightColor.YELLOW},
-        show_keys=["prepare_to_stop", "can_go", "speed_cap_ratio", "active_color", "reason"],
+        expect={"prepare_to_stop": True, "prepare_to_move": False, "speed_cap_ratio": 0.4, "active_color": LightColor.YELLOW},
+        show_keys=["prepare_to_stop", "prepare_to_move", "can_go", "speed_cap_ratio", "active_color", "reason"],
     )
 
     total += 1
     passed += case(
         algo="Trafik ışığı (TrafficLightLogic)",
-        name="TR: SARI (çok yakın) — geçmeye commit",
-        desc="Sarı ışık çok yakınsa (mesafe <= 12m) can_go=True ve speed_cap_ratio=1.0 beklenir.",
+        name="TR: SARI (yakın) — yine yavaşlama (commit yok)",
+        desc="Sarı yakında da tam hız verilmez; yavaşlama tavanı korunur.",
         run=lambda: run_light_confirmed(LightColor.YELLOW, distance_m=8.0),
-        expect={"can_go": True, "speed_cap_ratio": 1.0, "active_color": LightColor.YELLOW},
-        show_keys=["prepare_to_stop", "can_go", "speed_cap_ratio", "active_color", "reason"],
+        expect={"prepare_to_stop": True, "can_go": False, "speed_cap_ratio": 0.4, "active_color": LightColor.YELLOW},
+        show_keys=["prepare_to_stop", "prepare_to_move", "can_go", "speed_cap_ratio", "active_color", "reason"],
+    )
+
+    def run_red_then_yellow():
+        logic = TrafficLightLogic()
+        r = LightDetection(color=LightColor.RED, confidence=0.9, bbox_px=(0, 0, 10, 10), estimated_distance_m=15.0)
+        y = LightDetection(color=LightColor.YELLOW, confidence=0.9, bbox_px=(0, 0, 10, 10), estimated_distance_m=8.0)
+        t0 = 2000.0
+        logic.update([r], now=t0)
+        logic.update([r], now=t0 + 0.1)
+        logic.update([y], now=t0 + 0.5)
+        return logic.update([y], now=t0 + 0.6)
+
+    total += 1
+    passed += case(
+        algo="Trafik ışığı (TrafficLightLogic)",
+        name="TR: KIRMIZI → SARI — harekete hazırlık",
+        desc="Önce kırmızı onaylandıysa sarıda prepare_to_move ve düşük hız tavanı.",
+        run=run_red_then_yellow,
+        expect={"prepare_to_move": True, "prepare_to_stop": False, "speed_cap_ratio": 0.25, "active_color": LightColor.YELLOW},
+        show_keys=["prepare_to_move", "prepare_to_stop", "can_go", "speed_cap_ratio", "active_color", "reason"],
+    )
+
+    def run_green_then_yellow():
+        logic = TrafficLightLogic()
+        g = LightDetection(color=LightColor.GREEN, confidence=0.9, bbox_px=(0, 0, 10, 10), estimated_distance_m=15.0)
+        y = LightDetection(color=LightColor.YELLOW, confidence=0.9, bbox_px=(0, 0, 10, 10), estimated_distance_m=10.0)
+        t0 = 3000.0
+        logic.update([g], now=t0)
+        logic.update([g], now=t0 + 0.1)
+        logic.update([y], now=t0 + 0.5)
+        return logic.update([y], now=t0 + 0.6)
+
+    total += 1
+    passed += case(
+        algo="Trafik ışığı (TrafficLightLogic)",
+        name="TR: YEŞİL → SARI — yavaşlama",
+        desc="Yeşilden sonra sarı: prepare_to_stop (kırmızı sonrası hazırlık değil).",
+        run=run_green_then_yellow,
+        expect={"prepare_to_stop": True, "prepare_to_move": False, "speed_cap_ratio": 0.4, "active_color": LightColor.YELLOW},
+        show_keys=["prepare_to_move", "prepare_to_stop", "can_go", "speed_cap_ratio", "active_color", "reason"],
+    )
+
+    total += 1
+    passed += case(
+        algo="Trafik ışığı (TrafficLightLogic)",
+        name="TR: SARI + hız≈0 — durmaya devam",
+        desc="vehicle_speed_mps verilirse ve ~0 ise sarıda da hız tavanı 0 kalır.",
+        run=lambda: run_light_confirmed(LightColor.YELLOW, distance_m=10.0, vehicle_speed_mps=0.0),
+        expect={"speed_cap_ratio": 0.0, "prepare_to_stop": True},
+        show_keys=["prepare_to_stop", "prepare_to_move", "speed_cap_ratio", "reason"],
     )
 
     total += 1

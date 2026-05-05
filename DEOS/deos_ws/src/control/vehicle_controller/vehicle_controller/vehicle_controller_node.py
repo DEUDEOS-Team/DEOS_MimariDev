@@ -17,6 +17,11 @@ class VehicleControllerNode(Node):
         self.declare_parameter("safety_emergency_stop_pulse_count", 3)
         self.declare_parameter("publish_cmd_vel_in_emergency", False)
         self.declare_parameter("publish_safety_emergency_stop_false_on_clear", True)
+        # Opsiyonel çift kilit: STM32 komutunu doğrudan dinle (perception ile aynı semantik)
+        self.declare_parameter("subscribe_hardware_motion_enable", True)
+        self.declare_parameter("hardware_motion_enable_topic", "/hardware/motion_enable")
+        self.declare_parameter("hardware_motion_enable_timeout_s", 0.5)
+        self.declare_parameter("hardware_motion_enable_fail_safe_stop", True)
         self._max_speed = float(self.get_parameter("max_speed_mps").value)
         self._max_steer = float(self.get_parameter("max_steer_rads").value)
 
@@ -33,6 +38,10 @@ class VehicleControllerNode(Node):
         self._safety_estop_pulse_remaining: int = 0
         self._prev_raw_estop: bool = False
 
+        # STM32 -> Pi (std_msgs/Bool): false=DUR, true=DEVAM; olay bazlı; perception ile aynı timeout fail-safe
+        self._hw_motion_enable: bool = False
+        self._hw_motion_stamp: float = 0.0
+
         self.create_subscription(Bool, "/perception/emergency_stop", self._estop_cb, 10)
         self.create_subscription(Float32, "/perception/speed_cap", self._speed_cap_cb, 10)
         self.create_subscription(Float32, "/perception/steering_override", self._steer_ovr_cb, 10)
@@ -40,6 +49,11 @@ class VehicleControllerNode(Node):
 
         self.create_subscription(Float32, "/planning/steering_ref", self._plan_steer_cb, 10)
         self.create_subscription(Float32, "/planning/speed_limit", self._plan_speed_cb, 10)
+
+        if bool(self.get_parameter("subscribe_hardware_motion_enable").value):
+            hw_topic = str(self.get_parameter("hardware_motion_enable_topic").value)
+            self.create_subscription(Bool, hw_topic, self._hw_motion_enable_cb, 10)
+            self.get_logger().info(f"hardware motion_enable subscription enabled on {hw_topic}")
 
         self._pub_cmd = self.create_publisher(Twist, "/cmd_vel", 10)
         self._pub_estop = self.create_publisher(Bool, "/safety/emergency_stop", 10)
@@ -51,6 +65,26 @@ class VehicleControllerNode(Node):
             f"estop_pulse_count={int(self.get_parameter('safety_emergency_stop_pulse_count').value)}, "
             f"publish_cmd_vel_in_emergency={bool(self.get_parameter('publish_cmd_vel_in_emergency').value)}"
         )
+
+    def _hardware_motion_allows_actuation(self) -> bool:
+        """STM32 canlı ve DEVAM (true) ise True; aksi halde False (DUR / mesaj yok / timeout)."""
+        now = time.monotonic()
+        timeout_s = float(self.get_parameter("hardware_motion_enable_timeout_s").value)
+        fail_safe = bool(self.get_parameter("hardware_motion_enable_fail_safe_stop").value)
+        motion_ok = (now - self._hw_motion_stamp) <= timeout_s
+        if not motion_ok and fail_safe:
+            return False
+        return bool(self._hw_motion_enable)
+
+    def _hw_motion_enable_cb(self, msg: Bool) -> None:
+        prev = bool(self._hw_motion_enable)
+        self._hw_motion_enable = bool(msg.data)
+        self._hw_motion_stamp = time.monotonic()
+        # False'a düşüşte STM32'ye kısa pulse (perception path'i çökse bile)
+        if prev and not self._hw_motion_enable:
+            pulse_n = int(self.get_parameter("safety_emergency_stop_pulse_count").value)
+            pulse_n = max(1, min(10, pulse_n))
+            self._safety_estop_pulse_remaining = max(self._safety_estop_pulse_remaining, pulse_n)
 
     def _touch_perception(self) -> None:
         self._perception_stamp = time.monotonic()
@@ -87,7 +121,13 @@ class VehicleControllerNode(Node):
         cmd = Twist()
         perception_age = time.monotonic() - self._perception_stamp
 
-        motion_hold = bool(self._emergency_stop or perception_age > self.PERCEPTION_TIMEOUT_S)
+        hw_hold = not self._hardware_motion_allows_actuation() if bool(
+            self.get_parameter("subscribe_hardware_motion_enable").value
+        ) else False
+
+        motion_hold = bool(
+            self._emergency_stop or perception_age > self.PERCEPTION_TIMEOUT_S or hw_hold
+        )
 
         if motion_hold:
             # /safety/emergency_stop: sınırlı sayıda True pulse (estop_cb yükselen kenarda doldurulur)

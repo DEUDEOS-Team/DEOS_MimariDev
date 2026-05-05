@@ -33,6 +33,17 @@ def generate_launch_description():
         default_value="",
         description="Görev rotası GeoJSON dosyası tam yolu",
     )
+
+    hardware_motion_enable_topic_arg = DeclareLaunchArgument(
+        "hardware_motion_enable_topic",
+        default_value="/hardware/motion_enable",
+        description="STM32 -> Pi tek komut topic'i (std_msgs/Bool): false=DUR, true=DEVAM",
+    )
+    hardware_motion_enable_timeout_arg = DeclareLaunchArgument(
+        "hardware_motion_enable_timeout_s",
+        default_value="0.5",
+        description="STM32 mesajı gelmezse (olay bazlı akış) Pi tarafında fail-safe süresi (saniye)",
+    )
     
     # Sensor Nodes
     camera_node = Node(
@@ -110,6 +121,11 @@ def generate_launch_description():
         package="vision_bridge",
         executable="perception_fusion_node",
         name="perception_fusion_node",
+        parameters=[{
+            "hardware_motion_enable_topic": LaunchConfiguration("hardware_motion_enable_topic"),
+            "hardware_motion_enable_timeout_s": LaunchConfiguration("hardware_motion_enable_timeout_s"),
+            "hardware_motion_enable_fail_safe_stop": True,
+        }],
         output="screen",
         respawn=True,
         respawn_delay=2,
@@ -147,6 +163,10 @@ def generate_launch_description():
         parameters=[{
             "max_speed_mps": 3.0,
             "max_steer_rads": 1.0,
+            "subscribe_hardware_motion_enable": True,
+            "hardware_motion_enable_topic": LaunchConfiguration("hardware_motion_enable_topic"),
+            "hardware_motion_enable_timeout_s": LaunchConfiguration("hardware_motion_enable_timeout_s"),
+            "hardware_motion_enable_fail_safe_stop": True,
         }],
         output="screen",
         respawn=True,
@@ -155,6 +175,8 @@ def generate_launch_description():
     
     return LaunchDescription([
         mission_file_arg,
+        hardware_motion_enable_topic_arg,
+        hardware_motion_enable_timeout_arg,
         # === SENSORS (Raw Data Acquisition) ===
         camera_node,           # RGB frames: /camera/color/image_raw (30 Hz)
         gps_node,              # GPS location: /gps/fix (5-10 Hz)

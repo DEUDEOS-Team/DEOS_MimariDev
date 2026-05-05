@@ -16,6 +16,7 @@ class TaskType:
     CHECKPOINT = "checkpoint"
     STOP = "stop"
     PARK = "park"
+    PARK_ENTRY = "park_entry"
     PICKUP = "pickup"
     DROPOFF = "dropoff"
 
@@ -25,6 +26,7 @@ VALID_TASKS = {
     TaskType.CHECKPOINT,
     TaskType.STOP,
     TaskType.PARK,
+    TaskType.PARK_ENTRY,
     TaskType.PICKUP,
     TaskType.DROPOFF,
 }
@@ -115,9 +117,24 @@ class GeoJsonMissionReader:
         lat = float(coords[1])
 
         props = feature.get("properties") or {}
-        task = str(props.get("task", TaskType.CHECKPOINT)).strip().lower()
-        if task not in VALID_TASKS:
-            task = TaskType.CHECKPOINT
+        task = str(props.get("task", "")).strip().lower()
+        name = str(props.get("name", f"Nokta-{idx}")).strip()
+
+        # Şartname GeoJSON örneğinde `name` alanı start/gorev_*/park_giris gibi geliyor.
+        # Repodaki algoritmalar ise `task` alanı üzerinden ilerliyor. Bu yüzden:
+        # - task yoksa veya tanımsızsa name ile eşle.
+        # - park giriş noktası: park_giris -> PARK_ENTRY
+        if not task or task not in VALID_TASKS:
+            low_name = name.strip().lower()
+            if low_name == "start":
+                task = TaskType.START
+            elif low_name.startswith("park"):
+                # park_giris / park_* isimleri: park moduna giriş tetikleyicisi
+                task = TaskType.PARK_ENTRY if low_name in {"park_giris", "park giriş", "otopark giris", "otopark_giris"} else TaskType.PARK
+            elif low_name.startswith(("gorev", "görev")):
+                task = TaskType.CHECKPOINT
+            else:
+                task = TaskType.CHECKPOINT
 
         heading_deg: Optional[float] = None
         if "heading_deg" in props and props["heading_deg"] is not None:
@@ -126,7 +143,7 @@ class GeoJsonMissionReader:
         return MissionPoint(
             index=idx,
             point_id=int(props["id"]) if "id" in props else None,
-            name=str(props.get("name", f"Nokta-{idx}")),
+            name=name,
             lat=lat,
             lon=lon,
             task=task,
