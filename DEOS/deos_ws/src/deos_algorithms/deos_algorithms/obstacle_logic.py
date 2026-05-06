@@ -44,6 +44,11 @@ STATIC_LANE_CHANGE_TRIGGER_M = 3.0
 STATIC_LANE_CHANGE_SPEED_CAP = 0.35
 STATIC_EMERGENCY_DISTANCE_M = 1.5
 
+# Sıralı statik engeller için kaçınma stabilizasyonu (zigzag azaltma)
+STATIC_AVOID_COMMIT_FRAMES = 6  # yön kararı en az bu kadar frame korunur
+STATIC_AVOID_CLEAR_DISTANCE_M = 4.5  # en yakın statik engel bu mesafeden uzaksa commit bırak
+STATIC_AVOID_SWITCH_MARGIN_M = 0.6  # zıt tarafa geçmek için "daha belirgin" yakınlık farkı
+
 
 def classify_obstacle(class_name: str) -> Optional[str]:
     if not class_name:
@@ -105,6 +110,8 @@ class ObstacleLogic:
         self._safety = SafetyLogic()
         self._dynamic_wait_active = False
         self._dynamic_clear_frames = 0
+        self._static_commit_dir: Optional[str] = None
+        self._static_commit_frames_left: int = 0
 
     def update(self, detections: list[ObstacleDetection]) -> ObstacleState:
         safety_dets = [
@@ -184,21 +191,60 @@ class ObstacleLogic:
 
     def _apply_static_avoidance(self, state: ObstacleState, static_threats: list[ThreatObservation]) -> None:
         nearest = self._nearest(static_threats)
-        if nearest is None or nearest.distance_m > STATIC_LANE_CHANGE_TRIGGER_M:
+        if nearest is None:
+            self._static_commit_dir = None
+            self._static_commit_frames_left = 0
+            state.road_blocked = False
+            return
+
+        # Commit bırakma: yol temizlenince
+        if nearest.distance_m > STATIC_AVOID_CLEAR_DISTANCE_M:
+            self._static_commit_dir = None
+            self._static_commit_frames_left = 0
+
+        if nearest.distance_m > STATIC_LANE_CHANGE_TRIGGER_M:
             barrier_count = sum(1 for threat in static_threats if threat.detection.class_name == ObstacleKind.BARRIER)
             state.road_blocked = barrier_count > 1
             return
 
+        # Sıralı engellerde zigzag'ı azaltmak için yönü "commit" et:
+        # - commit aktifse, süre bitene kadar aynı yönü koru
+        # - commit yoksa, en yakın engelin lateral'ına göre karar ver
+        desired_dir = self._avoidance_direction(nearest.lateral_m)
+
+        if self._static_commit_dir is None:
+            self._static_commit_dir = desired_dir
+            self._static_commit_frames_left = STATIC_AVOID_COMMIT_FRAMES
+        else:
+            # commit aktifken yön değiştirmeyi zorlaştır:
+            # zıt yön ancak daha yakın ve belirgin ise (mesafe marjı) değişsin
+            if desired_dir != self._static_commit_dir and self._static_commit_frames_left <= 0:
+                # Yakındaki zıt tarafta engel var mı?
+                opposite = [t for t in static_threats if self._avoidance_direction(t.lateral_m) == desired_dir]
+                nearest_op = self._nearest(opposite)
+                if nearest_op is not None and (nearest.distance_m - nearest_op.distance_m) >= STATIC_AVOID_SWITCH_MARGIN_M:
+                    self._static_commit_dir = desired_dir
+                    self._static_commit_frames_left = STATIC_AVOID_COMMIT_FRAMES
+
+        if self._static_commit_frames_left > 0:
+            self._static_commit_frames_left -= 1
+
         state.suggest_lane_change = True
-        state.avoidance_direction = self._avoidance_direction(nearest.lateral_m)
+        state.avoidance_direction = self._static_commit_dir
         state.behavior_mode = ObstacleBehavior.STATIC_AVOID
         state.speed_cap_ratio = min(state.speed_cap_ratio, STATIC_LANE_CHANGE_SPEED_CAP)
-        state.reason = f"AVOID_STATIC: {nearest.detection.class_name} -> {state.avoidance_direction} at {nearest.distance_m:.1f}m"
+        state.reason = (
+            f"AVOID_STATIC: {nearest.detection.class_name} -> {state.avoidance_direction} "
+            f"at {nearest.distance_m:.1f}m (commit_left={self._static_commit_frames_left})"
+        )
 
         if nearest.distance_m > STATIC_EMERGENCY_DISTANCE_M:
             state.emergency_stop = False
             if state.threat_level == ThreatLevel.EMERGENCY:
                 state.threat_level = ThreatLevel.HARD_SLOW
+            # SafetyLogic can output speed_cap_ratio=0.0 for <3m.
+            # For static avoidance beyond the hard emergency distance, do not keep a full stop cap.
+            state.speed_cap_ratio = max(state.speed_cap_ratio, STATIC_LANE_CHANGE_SPEED_CAP)
 
         barrier_count = sum(1 for threat in static_threats if threat.detection.class_name == ObstacleKind.BARRIER)
         state.road_blocked = barrier_count > 1

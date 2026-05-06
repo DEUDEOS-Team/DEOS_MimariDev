@@ -193,7 +193,7 @@ def test_parking_detections_from_signs():
 
 
 def test_parking_only_allows_parking_sign_spot():
-    """Yalnızca parking_allowed=True adaylar manevra hedefi olur; yasak slotta ilerleme yok."""
+    """Yalnızca parking_allowed=True adaylar manevra hedefi olur; yasak slotta manevra yok (arama devam edebilir)."""
     from deos_algorithms.parking_logic import ParkingDetection, ParkingLogic, ParkPhase
 
     logic = ParkingLogic()

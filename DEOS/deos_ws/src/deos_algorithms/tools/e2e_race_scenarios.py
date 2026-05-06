@@ -13,6 +13,10 @@ Kapsam (bu repodaki mevcut mimari):
 Çalıştırma:
   cd DEOS/deos_ws/src/deos_algorithms
   python tools/e2e_race_scenarios.py
+
+Ek test:
+  Işık + engel aynı anda çatışma senaryoları için:
+  python tools/e2e_full_stack_conflicts.py
 """
 
 from __future__ import annotations

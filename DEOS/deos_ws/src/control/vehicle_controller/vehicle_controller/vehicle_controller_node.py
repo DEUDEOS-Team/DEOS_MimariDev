@@ -8,6 +8,7 @@ from std_msgs.msg import Bool, Float32
 
 class VehicleControllerNode(Node):
     PERCEPTION_TIMEOUT_S = 0.2
+    LANE_TIMEOUT_S = 0.2
 
     def __init__(self):
         super().__init__("vehicle_controller_node")
@@ -17,6 +18,11 @@ class VehicleControllerNode(Node):
         self.declare_parameter("safety_emergency_stop_pulse_count", 3)
         self.declare_parameter("publish_cmd_vel_in_emergency", False)
         self.declare_parameter("publish_safety_emergency_stop_false_on_clear", True)
+        # Opsiyonel: lane_control referanslarını kullan (GPS planning yerine)
+        self.declare_parameter("use_lane_control", True)
+        self.declare_parameter("lane_steering_topic", "/lane/steering_ref")
+        self.declare_parameter("lane_speed_topic", "/lane/speed_limit")
+        self.declare_parameter("lane_timeout_s", 0.2)
         # Opsiyonel çift kilit: STM32 komutunu doğrudan dinle (perception ile aynı semantik)
         self.declare_parameter("subscribe_hardware_motion_enable", True)
         self.declare_parameter("hardware_motion_enable_topic", "/hardware/motion_enable")
@@ -33,6 +39,9 @@ class VehicleControllerNode(Node):
 
         self._plan_steer: float = 0.0
         self._plan_speed: float = 0.0
+        self._lane_steer: float = 0.0
+        self._lane_speed: float = 0.0
+        self._lane_stamp: float = 0.0
 
         self._prev_emergency_active: bool = False
         self._safety_estop_pulse_remaining: int = 0
@@ -49,6 +58,15 @@ class VehicleControllerNode(Node):
 
         self.create_subscription(Float32, "/planning/steering_ref", self._plan_steer_cb, 10)
         self.create_subscription(Float32, "/planning/speed_limit", self._plan_speed_cb, 10)
+
+        if bool(self.get_parameter("use_lane_control").value):
+            self.create_subscription(Float32, str(self.get_parameter("lane_steering_topic").value), self._lane_steer_cb, 10)
+            self.create_subscription(Float32, str(self.get_parameter("lane_speed_topic").value), self._lane_speed_cb, 10)
+            self.get_logger().info(
+                "lane_control enabled — "
+                f"steer={str(self.get_parameter('lane_steering_topic').value)}, "
+                f"speed={str(self.get_parameter('lane_speed_topic').value)}"
+            )
 
         if bool(self.get_parameter("subscribe_hardware_motion_enable").value):
             hw_topic = str(self.get_parameter("hardware_motion_enable_topic").value)
@@ -117,6 +135,14 @@ class VehicleControllerNode(Node):
     def _plan_speed_cb(self, msg: Float32) -> None:
         self._plan_speed = float(msg.data)
 
+    def _lane_steer_cb(self, msg: Float32) -> None:
+        self._lane_steer = float(msg.data)
+        self._lane_stamp = time.monotonic()
+
+    def _lane_speed_cb(self, msg: Float32) -> None:
+        self._lane_speed = float(msg.data)
+        self._lane_stamp = time.monotonic()
+
     def _tick(self) -> None:
         cmd = Twist()
         perception_age = time.monotonic() - self._perception_stamp
@@ -152,10 +178,21 @@ class VehicleControllerNode(Node):
 
         self._prev_emergency_active = False
 
-        speed_ratio = min(self._speed_cap, self._plan_speed)
+        lane_ok = False
+        if bool(self.get_parameter("use_lane_control").value):
+            lane_timeout_s = float(self.get_parameter("lane_timeout_s").value)
+            lane_ok = (time.monotonic() - self._lane_stamp) <= lane_timeout_s
+
+        base_speed = self._plan_speed
+        base_steer = self._plan_steer
+        if lane_ok:
+            base_speed = min(base_speed, self._lane_speed)
+            base_steer = self._lane_steer
+
+        speed_ratio = min(self._speed_cap, base_speed)
         speed_ratio = max(0.0, min(1.0, speed_ratio))
 
-        steer_ratio = self._steer_override if self._has_steer_override else self._plan_steer
+        steer_ratio = self._steer_override if self._has_steer_override else base_steer
         steer_ratio = max(-1.0, min(1.0, steer_ratio))
 
         cmd.linear.x = speed_ratio * self._max_speed

@@ -36,6 +36,10 @@ LATERAL_GAIN = 1.50
 SPEED_APPROACH = 0.40
 SPEED_ALIGN = 0.20
 SPEED_MANEUVER = 0.15
+SPEED_SEARCH = 0.20
+
+SEARCH_STEER_AMPL = 0.20
+SEARCH_TOGGLE_FRAMES = 25
 
 PARK_CONFIRM_FRAMES = 20
 
@@ -80,12 +84,16 @@ class ParkingLogic:
     def __init__(self):
         self._phase: str = ParkPhase.WAITING
         self._park_confirm: int = 0
+        self._search_frames: int = 0
 
     def update(self, detections: list[ParkingDetection]) -> ParkState:
         valid = [d for d in detections if d.confidence >= MIN_CONFIDENCE]
         eligible = [d for d in valid if d.parking_allowed is True]
         if not eligible:
             return self._no_eligible_spot(valid)
+
+        # Uygun aday görünmeye başladı: arama sayacını sıfırla
+        self._search_frames = 0
 
         spot = max(eligible, key=lambda d: d.bbox_px[3])
         dist = self._estimate_distance(spot)
@@ -197,29 +205,44 @@ class ParkingLogic:
     def _no_eligible_spot(self, valid: list[ParkingDetection]) -> ParkState:
         if self._phase == ParkPhase.PARKED:
             return ParkState(phase=ParkPhase.PARKED, complete=True, reason="park tamamlandı")
+        self._search_frames += 1
         if not valid:
-            return ParkState(phase=self._phase, reason="park yeri tespit edilmedi")
+            steer = SEARCH_STEER_AMPL if (self._search_frames // SEARCH_TOGGLE_FRAMES) % 2 == 0 else -SEARCH_STEER_AMPL
+            return ParkState(
+                phase=self._phase,
+                steering=float(steer),
+                speed_ratio=float(SPEED_SEARCH),
+                reason="park yeri/tabela tespit edilmedi: yavaşça arıyor",
+                no_eligible_spot=True,
+            )
         forbidden = [d for d in valid if d.parking_allowed is False]
         unknown = [d for d in valid if d.parking_allowed is None]
         if forbidden and not unknown:
             return ParkState(
                 phase=self._phase,
-                reason="park yasak tabelası: bu slotta manevra yapılmıyor",
+                steering=0.0,
+                speed_ratio=float(SPEED_SEARCH),
+                reason="park yasak tabelası: slot atlanıyor, diğer slotlar aranıyor",
                 no_eligible_spot=True,
             )
         if unknown and not forbidden:
             return ParkState(
                 phase=self._phase,
-                reason="park tabelası sınıfı yok: izinli slot seçilemiyor",
+                steering=float(SEARCH_STEER_AMPL if (self._search_frames // SEARCH_TOGGLE_FRAMES) % 2 == 0 else -SEARCH_STEER_AMPL),
+                speed_ratio=float(SPEED_SEARCH),
+                reason="park tabelası sınıfı yok: izinli slot seçilemiyor, yavaşça arıyor",
                 no_eligible_spot=True,
             )
         return ParkState(
             phase=self._phase,
-            reason="uygun park yeri (izinli) tespit edilmedi",
+            steering=0.0,
+            speed_ratio=float(SPEED_SEARCH),
+            reason="uygun park yeri (izinli) tespit edilmedi: yavaşça arıyor",
             no_eligible_spot=True,
         )
 
     def _reset(self) -> None:
         self._phase = ParkPhase.WAITING
         self._park_confirm = 0
+        self._search_frames = 0
 

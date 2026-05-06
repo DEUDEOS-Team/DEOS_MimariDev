@@ -30,11 +30,11 @@ sys.path.insert(0, str(_pkg_root))
 from deos_algorithms.geojson_mission_reader import GeoJsonMissionReader  # noqa: E402
 from deos_algorithms.route_graph import (  # noqa: E402
     build_graph_from_centerlines_geojson,
-    dijkstra,
     load_centerlines_geojson,
     nearest_node_id,
     path_coords,
 )
+from deos_algorithms.route_planner import _leg_path, _tunnel_multiplier_from_plan  # noqa: E402
 
 
 def _ensure_utf8_stdio() -> None:
@@ -47,8 +47,7 @@ def _ensure_utf8_stdio() -> None:
                 pass
 
 
-def _load_mission_points(path: str) -> list[dict[str, Any]]:
-    plan = GeoJsonMissionReader().read_file(path)
+def _mission_points_from_plan(plan) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for p in plan.points:
         out.append(
@@ -71,6 +70,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--mission", required=True, help="Mission GeoJSON path (start/gorev_*/park_giris)")
     ap.add_argument("--round", type=int, default=7, help="Node coordinate rounding decimals (default: 7)")
     ap.add_argument("--out", default="", help="Output JSON path (optional). Empty -> stdout only")
+    ap.add_argument(
+        "--no-tunnel-mandatory",
+        action="store_true",
+        help="Centerlines'ta tunnel olsa bile zorunlu tünel geçişi kullanma (debug)",
+    )
     args = ap.parse_args(argv)
 
     if not Path(args.centerlines).exists():
@@ -81,7 +85,11 @@ def main(argv: list[str] | None = None) -> int:
     center_geo = load_centerlines_geojson(args.centerlines)
     g = build_graph_from_centerlines_geojson(center_geo, coord_round_decimals=int(args.round))
 
-    mission_pts = _load_mission_points(args.mission)
+    mission_plan = GeoJsonMissionReader().read_file(args.mission)
+    edge_mult = _tunnel_multiplier_from_plan(mission_plan)
+
+    mission_pts = _mission_points_from_plan(mission_plan)
+    tunnel_mandatory = not bool(args.no_tunnel_mandatory)
     if not mission_pts:
         raise SystemExit("mission boş")
 
@@ -95,7 +103,14 @@ def main(argv: list[str] | None = None) -> int:
     legs: list[dict[str, Any]] = []
     full_node_path: list[int] = []
     for a, b in zip(snapped, snapped[1:], strict=False):
-        p = dijkstra(g, start=int(a["node_id"]), goal=int(b["node_id"]))
+        p = _leg_path(
+            g,
+            int(a["node_id"]),
+            int(b["node_id"]),
+            blocked_edges=None,
+            edge_mult=edge_mult,
+            tunnel_mandatory=tunnel_mandatory,
+        )
         legs.append(
             {
                 "from": {"name": a["name"], "task": a["task"], "node_id": a["node_id"]},
@@ -115,6 +130,9 @@ def main(argv: list[str] | None = None) -> int:
     out = {
         "centerlines": str(Path(args.centerlines).as_posix()),
         "mission": str(Path(args.mission).as_posix()),
+        "mission_meta": dict(mission_plan.meta),
+        "prefer_tunnel_routing": bool(mission_plan.prefer_tunnel_routing),
+        "tunnel_mandatory": tunnel_mandatory,
         "graph": {"n_nodes": len(g.nodes), "n_edges": sum(len(v) for v in g.adj.values())},
         "mission_snapped": snapped,
         "route": {

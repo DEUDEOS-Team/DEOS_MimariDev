@@ -34,6 +34,12 @@ def generate_launch_description():
         description="Görev rotası GeoJSON dosyası tam yolu",
     )
 
+    centerlines_file_arg = DeclareLaunchArgument(
+        "centerlines_file",
+        default_value="",
+        description="Pist şerit centerline GeoJSON (LineString) tam yolu (routing graph üretimi için)",
+    )
+
     hardware_motion_enable_topic_arg = DeclareLaunchArgument(
         "hardware_motion_enable_topic",
         default_value="/hardware/motion_enable",
@@ -43,6 +49,18 @@ def generate_launch_description():
         "hardware_motion_enable_timeout_s",
         default_value="0.5",
         description="STM32 mesajı gelmezse (olay bazlı akış) Pi tarafında fail-safe süresi (saniye)",
+    )
+
+    require_go_signal_arg = DeclareLaunchArgument(
+        "require_go_signal",
+        default_value="true",
+        description="UMS-2 Go sinyali gelmeden göreve başlamayı engelle (mission_planning_node speed=0).",
+    )
+
+    tunnel_mandatory_arg = DeclareLaunchArgument(
+        "tunnel_mandatory",
+        default_value="true",
+        description="Centerlines GeoJSON'da tunnel: true varsa her bacak en az bir tünel kenarından geçer (görev dosyasında alan gerekmez).",
     )
     
     # Sensor Nodes
@@ -130,6 +148,36 @@ def generate_launch_description():
         respawn=True,
         respawn_delay=2,
     )
+
+    # Lane tracking (Raspberry/Hailo)
+    lane_detection_node = Node(
+        package="lane_tracking",
+        executable="lane_detection_node",
+        name="lane_detection_node",
+        parameters=[{
+            "image_topic": "/camera/color/image_raw",
+            "out_center_pts_topic": "/perception/center_pts",
+            "hef_path": "model.hef",
+        }],
+        output="screen",
+        respawn=True,
+        respawn_delay=2,
+    )
+
+    lane_control_node = Node(
+        package="lane_tracking",
+        executable="lane_control_node",
+        name="lane_control_node",
+        parameters=[{
+            "center_pts_topic": "/perception/center_pts",
+            "lane_steer_topic": "/lane/steering_ref",
+            "lane_speed_topic": "/lane/speed_limit",
+            "use_intent": False,
+        }],
+        output="screen",
+        respawn=True,
+        respawn_delay=2,
+    )
     
     # Localization - PCL based (scan matching)
     pcl_localization_node = Node(
@@ -148,7 +196,12 @@ def generate_launch_description():
         name="mission_planning_node",
         parameters=[{
             "mission_file": LaunchConfiguration("mission_file"),
+            "centerlines_file": LaunchConfiguration("centerlines_file"),
+            "centerlines_round_decimals": 7,
+            "require_go_signal": LaunchConfiguration("require_go_signal"),
+            "go_topic": LaunchConfiguration("hardware_motion_enable_topic"),
             "heading_offset_deg": 0.0,
+            "tunnel_mandatory": LaunchConfiguration("tunnel_mandatory"),
         }],
         output="screen",
         respawn=True,
@@ -175,8 +228,11 @@ def generate_launch_description():
     
     return LaunchDescription([
         mission_file_arg,
+        centerlines_file_arg,
         hardware_motion_enable_topic_arg,
         hardware_motion_enable_timeout_arg,
+        require_go_signal_arg,
+        tunnel_mandatory_arg,
         # === SENSORS (Raw Data Acquisition) ===
         camera_node,           # RGB frames: /camera/color/image_raw (30 Hz)
         gps_node,              # GPS location: /gps/fix (5-10 Hz)
@@ -186,6 +242,8 @@ def generate_launch_description():
         # === PERCEPTION ===
         stereo_detector_node,
         lidar_obstacle_node,
+        lane_detection_node,
+        lane_control_node,
         perception_fusion_node,
         
         # === LOCALIZATION (Position Estimation) ===

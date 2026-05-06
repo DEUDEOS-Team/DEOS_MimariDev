@@ -6,12 +6,13 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Imu
 from sensor_msgs.msg import PointCloud2
-from std_msgs.msg import Bool, Float32, String
+from std_msgs.msg import Bool, Float32, String, Int32
 
 from deos_algorithms.obstacle_logic import ObstacleLogic
 from deos_algorithms.parking_logic import ParkingLogic
 from deos_algorithms.perception_fusion import fuse, parking_detections_from_signs
 from deos_algorithms.decision_arbiter import Candidate, DecisionArbiter, LaneBounds, ReasonCode
+from deos_algorithms.lane_violation import LaneViolationTracker, wheels_outside_lane
 from deos_algorithms.sensors.types import ImuSample, LidarObstacle, StereoBbox
 from deos_algorithms.slalom_logic import SlalomLogic
 from deos_algorithms.traffic_light_logic import TrafficLightLogic
@@ -43,6 +44,10 @@ class PerceptionFusionNode(Node):
         self.declare_parameter("lane_bounds_z_max_m", 0.3)
         self.declare_parameter("lane_bounds_margin_m", 0.25)
         self.declare_parameter("publish_decision_debug", True)
+        # Şerit ihlali metriği (şartname): 2 tekerlek dışarı + 10s bucket sayacı
+        self.declare_parameter("publish_lane_violation", True)
+        self.declare_parameter("vehicle_half_width_m", 0.75)  # yaklaşık: araç genişliği/2
+        self.declare_parameter("lane_violation_bucket_s", 10.0)
 
         self._sign = TrafficSignLogic()
         self._light = TrafficLightLogic()
@@ -50,6 +55,7 @@ class PerceptionFusionNode(Node):
         self._slalom = SlalomLogic()
         self._parking = ParkingLogic()
         self._arbiter = DecisionArbiter()
+        self._lane_violation = LaneViolationTracker()
 
         self._stereo: list[StereoBbox] = []
         self._lidar: list[LidarObstacle] = []
@@ -89,6 +95,9 @@ class PerceptionFusionNode(Node):
         self._pub_park_complete = self.create_publisher(Bool, "/perception/park_complete", 10)
         self._pub_turn_permissions = self.create_publisher(String, "/perception/turn_permissions", 10)
         self._pub_decision_debug = self.create_publisher(String, "/perception/decision_debug", 10)
+        self._pub_lane_violation = self.create_publisher(Bool, "/safety/lane_violation", 10)
+        self._pub_lane_violation_count = self.create_publisher(Int32, "/safety/lane_violation_count", 10)
+        self._pub_lane_violation_seconds = self.create_publisher(Float32, "/safety/lane_violation_seconds", 10)
 
         self.create_timer(0.05, self._tick)  # 20 Hz
         self.get_logger().info(
@@ -321,6 +330,22 @@ class PerceptionFusionNode(Node):
             lane=lane,
             lane_required_for_avoidance=bool(self.get_parameter("require_lane_walls_for_avoidance").value),
         )
+
+        # --- Şerit ihlali metriği ---
+        if bool(self.get_parameter("publish_lane_violation").value):
+            half_w = float(self.get_parameter("vehicle_half_width_m").value)
+            bucket_s = float(self.get_parameter("lane_violation_bucket_s").value)
+            self._lane_violation.bucket_s = max(1.0, bucket_s)
+            outside = False
+            if lane_fresh and lane is not None and lane.is_valid:
+                outside = wheels_outside_lane(lane=lane, half_width_m=half_w)
+            else:
+                # Lane yoksa ihlal ölçemiyoruz; sayaç birikmesin
+                outside = False
+            self._lane_violation.update(now_s=now, outside=bool(outside), speed_mps=None)
+            self._pub_lane_violation.publish(Bool(data=bool(outside)))
+            self._pub_lane_violation_count.publish(Int32(data=int(self._lane_violation.violation_count)))
+            self._pub_lane_violation_seconds.publish(Float32(data=float(self._lane_violation.outside_accum_s)))
 
         if bool(self.get_parameter("publish_decision_debug").value):
             try:

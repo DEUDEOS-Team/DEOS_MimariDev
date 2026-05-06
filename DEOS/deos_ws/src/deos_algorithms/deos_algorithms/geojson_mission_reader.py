@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 
 class TaskType:
@@ -29,6 +29,38 @@ VALID_TASKS = {
     TaskType.PARK_ENTRY,
     TaskType.PICKUP,
     TaskType.DROPOFF,
+}
+
+# Şartname / Türkçe görev GeoJSON: `task` alanında kullanılabilecek eş anlamlılar (küçük harfe çevrilir).
+_TASK_SYNONYMS: dict[str, str] = {
+    # başlangıç
+    "baslangic": TaskType.START,
+    "başlangıç": TaskType.START,
+    "basla": TaskType.START,
+    # durak / zorunlu durma
+    "durak": TaskType.STOP,
+    "bus_stop": TaskType.STOP,
+    # görev noktası
+    "gorev": TaskType.CHECKPOINT,
+    "görev": TaskType.CHECKPOINT,
+    "gorev_yeri": TaskType.CHECKPOINT,
+    "görev_yeri": TaskType.CHECKPOINT,
+    "checkpoint": TaskType.CHECKPOINT,
+    # park
+    "park": TaskType.PARK,
+    "park_yeri": TaskType.PARK,
+    "parkyeri": TaskType.PARK,
+    "otopark": TaskType.PARK,
+    "park_entry": TaskType.PARK_ENTRY,
+    "park_giris": TaskType.PARK_ENTRY,
+    "park_giriş": TaskType.PARK_ENTRY,
+    "otopark_giris": TaskType.PARK_ENTRY,
+    "otopark_giriş": TaskType.PARK_ENTRY,
+    # yol üstü ara nokta (rota zorlaması — tünel ekseni vb.)
+    "via": TaskType.CHECKPOINT,
+    "ara_nokta": TaskType.CHECKPOINT,
+    "tunel": TaskType.CHECKPOINT,
+    "tünel": TaskType.CHECKPOINT,
 }
 
 DEFAULT_ARRIVAL_RADIUS_M = 1.0
@@ -53,6 +85,8 @@ class MissionPlan:
     points: list[MissionPoint] = field(default_factory=list)
     source_file: str = ""
     raw_crs: Optional[str] = None
+    # GeoJSON FeatureCollection üzerindeki yabancı üyeler / özellikler (rota tercihi vb.)
+    meta: dict[str, Any] = field(default_factory=dict)
 
     @property
     def start(self) -> Optional[MissionPoint]:
@@ -70,6 +104,19 @@ class MissionPlan:
 
     def __iter__(self):
         return iter(self.points)
+
+    @property
+    def prefer_tunnel_routing(self) -> bool:
+        v = self.meta.get("prefer_tunnel", self.meta.get("prefer_tunnel_routing", False))
+        return v in (True, "true", "True", 1, "1")
+
+    @property
+    def tunnel_edge_cost_scale(self) -> float:
+        """`tunnel: true` centerline kenarlarında maliyet çarpanı (<1 => tünel tercih edilir)."""
+        try:
+            return float(self.meta.get("tunnel_edge_cost_scale", 0.3))
+        except Exception:
+            return 0.3
 
 
 class GeoJsonMissionReader:
@@ -91,6 +138,15 @@ class GeoJsonMissionReader:
         plan = MissionPlan(source_file=source_file)
         if "crs" in data:
             plan.raw_crs = str(data["crs"])
+
+        meta: dict[str, Any] = {}
+        root_props = data.get("properties")
+        if isinstance(root_props, dict):
+            meta.update(root_props)
+        extra = data.get("deos_mission_meta")
+        if isinstance(extra, dict):
+            meta.update(extra)
+        plan.meta = meta
 
         for idx, feature in enumerate(data.get("features", [])):
             point = self._parse_feature(idx, feature)
@@ -117,22 +173,32 @@ class GeoJsonMissionReader:
         lat = float(coords[1])
 
         props = feature.get("properties") or {}
-        task = str(props.get("task", "")).strip().lower()
+        task_raw = str(props.get("task", "")).strip().lower()
         name = str(props.get("name", f"Nokta-{idx}")).strip()
+        low_name = name.strip().lower()
+
+        # Önce eş anlamlı `task` değerlerini iç kod tipine çevir
+        task = _TASK_SYNONYMS.get(task_raw, task_raw)
+        if task not in VALID_TASKS:
+            task = ""
 
         # Şartname GeoJSON örneğinde `name` alanı start/gorev_*/park_giris gibi geliyor.
         # Repodaki algoritmalar ise `task` alanı üzerinden ilerliyor. Bu yüzden:
         # - task yoksa veya tanımsızsa name ile eşle.
         # - park giriş noktası: park_giris -> PARK_ENTRY
         if not task or task not in VALID_TASKS:
-            low_name = name.strip().lower()
             if low_name == "start":
                 task = TaskType.START
-            elif low_name.startswith("park"):
-                # park_giris / park_* isimleri: park moduna giriş tetikleyicisi
-                task = TaskType.PARK_ENTRY if low_name in {"park_giris", "park giriş", "otopark giris", "otopark_giris"} else TaskType.PARK
+            elif low_name.startswith("durak"):
+                task = TaskType.STOP
             elif low_name.startswith(("gorev", "görev")):
                 task = TaskType.CHECKPOINT
+            elif low_name.startswith(("tunel", "tünel", "tunnel")):
+                task = TaskType.CHECKPOINT
+            elif low_name in {"park_giris", "park giriş", "otopark giris", "otopark_giris", "otopark_giriş"}:
+                task = TaskType.PARK_ENTRY
+            elif low_name.startswith("park"):
+                task = TaskType.PARK
             else:
                 task = TaskType.CHECKPOINT
 
