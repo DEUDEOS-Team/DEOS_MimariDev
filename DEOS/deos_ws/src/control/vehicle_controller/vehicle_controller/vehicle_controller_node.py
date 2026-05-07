@@ -28,6 +28,9 @@ class VehicleControllerNode(Node):
         self.declare_parameter("hardware_motion_enable_topic", "/hardware/motion_enable")
         self.declare_parameter("hardware_motion_enable_timeout_s", 0.5)
         self.declare_parameter("hardware_motion_enable_fail_safe_stop", True)
+        # Manuel/otonom ayrımı: otonom kapalıysa /cmd_vel publish etme (STM32 manual sürüşe geçebilir)
+        self.declare_parameter("subscribe_autonomy_enable", True)
+        self.declare_parameter("autonomy_enable_topic", "/hardware/autonomy_enable")
         self._max_speed = float(self.get_parameter("max_speed_mps").value)
         self._max_steer = float(self.get_parameter("max_steer_rads").value)
 
@@ -50,6 +53,8 @@ class VehicleControllerNode(Node):
         # STM32 -> Pi (std_msgs/Bool): false=DUR, true=DEVAM; olay bazlı; perception ile aynı timeout fail-safe
         self._hw_motion_enable: bool = False
         self._hw_motion_stamp: float = 0.0
+        self._autonomy_enable: bool = True
+        self._autonomy_stamp: float = 0.0
 
         self.create_subscription(Bool, "/perception/emergency_stop", self._estop_cb, 10)
         self.create_subscription(Float32, "/perception/speed_cap", self._speed_cap_cb, 10)
@@ -72,6 +77,11 @@ class VehicleControllerNode(Node):
             hw_topic = str(self.get_parameter("hardware_motion_enable_topic").value)
             self.create_subscription(Bool, hw_topic, self._hw_motion_enable_cb, 10)
             self.get_logger().info(f"hardware motion_enable subscription enabled on {hw_topic}")
+
+        if bool(self.get_parameter("subscribe_autonomy_enable").value):
+            at = str(self.get_parameter("autonomy_enable_topic").value)
+            self.create_subscription(Bool, at, self._autonomy_enable_cb, 10)
+            self.get_logger().info(f"autonomy_enable subscription enabled on {at}")
 
         self._pub_cmd = self.create_publisher(Twist, "/cmd_vel", 10)
         self._pub_estop = self.create_publisher(Bool, "/safety/emergency_stop", 10)
@@ -103,6 +113,10 @@ class VehicleControllerNode(Node):
             pulse_n = int(self.get_parameter("safety_emergency_stop_pulse_count").value)
             pulse_n = max(1, min(10, pulse_n))
             self._safety_estop_pulse_remaining = max(self._safety_estop_pulse_remaining, pulse_n)
+
+    def _autonomy_enable_cb(self, msg: Bool) -> None:
+        self._autonomy_enable = bool(msg.data)
+        self._autonomy_stamp = time.monotonic()
 
     def _touch_perception(self) -> None:
         self._perception_stamp = time.monotonic()
@@ -154,6 +168,21 @@ class VehicleControllerNode(Node):
         motion_hold = bool(
             self._emergency_stop or perception_age > self.PERCEPTION_TIMEOUT_S or hw_hold
         )
+
+        autonomy_hold = False
+        if bool(self.get_parameter("subscribe_autonomy_enable").value):
+            autonomy_hold = not bool(self._autonomy_enable)
+
+        if autonomy_hold:
+            # Manual mode: do not publish /cmd_vel (avoid fighting manual driver),
+            # and do not pulse /safety/emergency_stop.
+            if self._prev_emergency_active and bool(
+                self.get_parameter("publish_safety_emergency_stop_false_on_clear").value
+            ):
+                self._pub_estop.publish(Bool(data=False))
+            self._prev_emergency_active = False
+            self._safety_estop_pulse_remaining = 0
+            return
 
         if motion_hold:
             # /safety/emergency_stop: sınırlı sayıda True pulse (estop_cb yükselen kenarda doldurulur)

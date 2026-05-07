@@ -32,6 +32,21 @@ def _param_as_bool(v) -> bool:
     return bool(v)
 
 
+def _angle_diff_deg(a: float, b: float) -> float:
+    """Return signed smallest difference a-b in degrees in [-180, 180]."""
+    d = (float(a) - float(b) + 180.0) % 360.0 - 180.0
+    return d
+
+
+def _bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Forward azimuth (deg) from (lat1,lon1) to (lat2,lon2)."""
+    phi1 = math.radians(float(lat1))
+    phi2 = math.radians(float(lat2))
+    dl = math.radians(float(lon2) - float(lon1))
+    y = math.sin(dl) * math.cos(phi2)
+    x = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(dl)
+    return (math.degrees(math.atan2(y, x)) + 360.0) % 360.0
+
 class MissionPlanningNode(Node):
     def __init__(self):
         super().__init__("mission_planning_node")
@@ -81,6 +96,8 @@ class MissionPlanningNode(Node):
         self._blocked_edges: set[tuple[int, int]] = set()
         self._road_blocked: bool = False
         self._mission_idx: int = 0  # base_plan hedef indeksi (replan için)
+        self._last_turn_replan_sig: str = ""
+        self._last_turn_replan_t: float = 0.0
 
         if self._base_plan is not None:
             plan = self._base_plan
@@ -125,6 +142,70 @@ class MissionPlanningNode(Node):
         self.create_subscription(Bool, "/perception/park_complete", self._park_complete_cb, 10)
 
         self.create_timer(0.2, self._tick_timeout)  # 5 Hz
+
+    def _turn_blocked_edges(self, *, cur_node: int, heading_deg: float) -> set[tuple[int, int]]:
+        """
+        Turn permissions -> temporarily blocked directed edges out of `cur_node`.
+        Lightweight approximation: classify outgoing edges as left/straight/right
+        by comparing edge bearing to current heading.
+        """
+        if self._turn_perm is None or self._route_graph is None:
+            return set()
+
+        forced = self._turn_perm.get("forced_direction")
+        left_ok = bool(self._turn_perm.get("left", True))
+        straight_ok = bool(self._turn_perm.get("straight", True))
+        right_ok = bool(self._turn_perm.get("right", True))
+
+        # Treat pass_left/pass_right/roundabout as non-forced for global routing
+        if forced in {"pass_left", "pass_right", "roundabout", None}:
+            forced = None
+
+        by_id = {n.id: n for n in self._route_graph.nodes}
+        n0 = by_id.get(int(cur_node))
+        if n0 is None:
+            return set()
+
+        edges = self._route_graph.adj.get(int(cur_node), [])
+        if not edges:
+            return set()
+
+        blocked: set[tuple[int, int]] = set()
+        straight_thr = 25.0
+        side_thr = 25.0
+
+        for e in edges:
+            n1 = by_id.get(int(e.v))
+            if n1 is None:
+                continue
+            b = _bearing_deg(n0.lat, n0.lon, n1.lat, n1.lon)
+            rel = _angle_diff_deg(b, float(heading_deg))  # + => right, - => left
+
+            is_left = rel <= -side_thr
+            is_right = rel >= side_thr
+            is_straight = abs(rel) < straight_thr
+
+            if forced == "left":
+                if not is_left:
+                    blocked.add((int(e.u), int(e.v)))
+                continue
+            if forced == "right":
+                if not is_right:
+                    blocked.add((int(e.u), int(e.v)))
+                continue
+            if forced == "straight":
+                if not is_straight:
+                    blocked.add((int(e.u), int(e.v)))
+                continue
+
+            if (not left_ok) and is_left:
+                blocked.add((int(e.u), int(e.v)))
+            if (not right_ok) and is_right:
+                blocked.add((int(e.u), int(e.v)))
+            if (not straight_ok) and is_straight:
+                blocked.add((int(e.u), int(e.v)))
+
+        return blocked
 
     def _go_cb(self, msg: Bool) -> None:
         self._go_ok = bool(msg.data)
@@ -225,13 +306,19 @@ class MissionPlanningNode(Node):
 
         wp_state, mission_dec = self._manager.update(pos, now_s=time.monotonic())
 
-        # Replanning: yol kapalı sinyali geldiyse, park modunda değilken graph üzerinden alternatif rota üret.
-        if (
-            self._road_blocked
-            and self._route_graph is not None
+        # Replanning:
+        # - road_blocked: edge blocking
+        # - turn_permissions: temporary blocked outgoing edges at current node (approaching waypoint)
+        do_replan = (
+            self._route_graph is not None
             and self._base_plan is not None
             and not bool(mission_dec.park_mode)
-        ):
+            and (
+                self._road_blocked
+                or (self._turn_perm is not None and float(wp_state.distance_to_wp_m) <= TURN_RULE_APPLY_DISTANCE_M)
+            )
+        )
+        if do_replan:
             try:
                 cur_node = int(nearest_node_id(self._route_graph, lat=pos.lat, lon=pos.lon))
                 # "Önümüzdeki" waypoint'i edge olarak bloke et (directed)
@@ -240,24 +327,48 @@ class MissionPlanningNode(Node):
                     if cur_node != nxt_node:
                         self._blocked_edges.add((cur_node, nxt_node))
 
+                turn_blocks = self._turn_blocked_edges(cur_node=cur_node, heading_deg=float(self._heading_deg))
+                sig = json.dumps(
+                    {
+                        "road_blocked": bool(self._road_blocked),
+                        "turn_perm": self._turn_perm,
+                        "turn_blocks_n": len(turn_blocks),
+                        "mission_idx": int(self._mission_idx),
+                        "cur_node": int(cur_node),
+                    },
+                    sort_keys=True,
+                    ensure_ascii=False,
+                )
+                now_m = time.monotonic()
+                if (not self._road_blocked) and sig == self._last_turn_replan_sig and (now_m - self._last_turn_replan_t) < 0.8:
+                    raise RuntimeError("replan debounce")
+
                 new_plan = route_remaining_mission_via_graph(
                     self._base_plan,
                     self._route_graph,
                     current_lat=pos.lat,
                     current_lon=pos.lon,
                     start_index=self._mission_idx,
-                    blocked_edges=self._blocked_edges,
+                    blocked_edges=set(self._blocked_edges) | set(turn_blocks),
                     tunnel_mandatory=self._tunnel_mandatory,
                 )
-                self._manager = MissionManager(new_plan)
-                # reset flag once we replanned
-                self._road_blocked = False
-                wp_state, mission_dec = self._manager.update(pos, now_s=time.monotonic())
-                self.get_logger().warn(
-                    f"REPLAN: road_blocked -> new_route_waypoints={len(new_plan.points)} blocked_edges={len(self._blocked_edges)}"
-                )
+                if new_plan.points:
+                    self._manager = MissionManager(new_plan)
+                    self._road_blocked = False
+                    self._last_turn_replan_sig = sig
+                    self._last_turn_replan_t = now_m
+                    wp_state, mission_dec = self._manager.update(pos, now_s=time.monotonic())
+                    self.get_logger().warn(
+                        f"REPLAN: ok -> new_route_waypoints={len(new_plan.points)} blocked_edges={len(self._blocked_edges)} turn_blocks={len(turn_blocks)}"
+                    )
+                else:
+                    # No route under constraints: keep last good plan/manager, keep moving.
+                    self.get_logger().error(
+                        f"REPLAN: no_route (kept last plan) blocked_edges={len(self._blocked_edges)} turn_blocks={len(turn_blocks)}"
+                    )
             except Exception as e:
-                self.get_logger().error(f"REPLAN başarısız: {e}")
+                if str(e) != "replan debounce":
+                    self.get_logger().error(f"REPLAN başarısız: {e}")
 
         steer = float(wp_state.steering_ref)
         base_speed = float(wp_state.speed_limit_ratio) * float(mission_dec.speed_cap_ratio)

@@ -164,6 +164,13 @@ class TrafficSignLogic:
         self._stop_cooldown_until: Optional[float] = None
         self._pending_turn_restrictions: TurnPermissions = TurnPermissions()
 
+    def reset(self) -> None:
+        self._memories.clear()
+        self._pending_stop = False
+        self._stop_started_at = None
+        self._stop_cooldown_until = None
+        self._pending_turn_restrictions = TurnPermissions()
+
     def update(self, detections: list[SignDetection], now: Optional[float] = None) -> TrafficSignState:
         if now is None:
             now = time.time()
@@ -203,7 +210,9 @@ class TrafficSignLogic:
                 mem.frames_seen += 1
                 mem.last_seen_time = now
                 if det.estimated_distance_m is not None:
-                    mem.last_distance_m = det.estimated_distance_m
+                    # Keep nearest distance (distance and confidence are tracked separately).
+                    if mem.last_distance_m is None or float(det.estimated_distance_m) < float(mem.last_distance_m):
+                        mem.last_distance_m = float(det.estimated_distance_m)
                 if mem.frames_seen >= CONFIRM_FRAMES:
                     mem.confirmed = True
 

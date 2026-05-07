@@ -46,6 +46,7 @@ class ReasonCode(str, Enum):
     PARK_MODE = "park_mode"
     PARK_NO_ELIGIBLE = "park_no_eligible"
     STATIC_AVOID = "static_avoid"
+    DYNAMIC_AVOID = "dynamic_avoid"
     SLALOM = "slalom"
 
 
@@ -75,6 +76,18 @@ class LaneBounds:
             # Çok dar / geçersiz: clamp etme (üst katman yavaşlayabilir)
             return target_y
         return max(lo, min(hi, target_y))
+
+
+def lane_contains_lateral(lane: LaneBounds, lateral_y_m: float) -> bool:
+    """Returns True if a lateral position is inside lane bounds (with margin applied)."""
+    if lane is None or not lane.is_valid:
+        return False
+    lo = lane.right_y_m + float(lane.margin_m)
+    hi = lane.left_y_m - float(lane.margin_m)
+    if lo >= hi:
+        return False
+    y = float(lateral_y_m)
+    return lo <= y <= hi
 
 
 @dataclass
@@ -129,7 +142,7 @@ class DecisionArbiter:
         # Override seçimi: öncelik sırası
         # Not: PARK > STATIC_AVOID > SLALOM (şartname park sonunda kritik, ama normal sürüşte engel kaçınma daha kritik)
         steer_src = None
-        for preferred in ("park", "static_avoid", "slalom"):
+        for preferred in ("park", "dynamic_avoid", "static_avoid", "slalom"):
             steer_src = next((c for c in candidates if c.name == preferred and c.steer_override is not None), None)
             if steer_src is not None:
                 break
@@ -152,7 +165,7 @@ class DecisionArbiter:
 
         # Lane constraint: sadece avoidance türü override'larda clamp et (park/slalom farklı bağlam)
         if has_steer and lane is not None and lane.is_valid and steer_src is not None:
-            if steer_src.name == "static_avoid":
+            if steer_src.name in {"static_avoid", "dynamic_avoid"}:
                 # Basit model: steer sign -> hedef lateral y (±0.6m)
                 target_y = 0.6 if steer > 0 else (-0.6 if steer < 0 else 0.0)
                 clamped_y = lane.clamp_lateral_target(target_y)
@@ -162,8 +175,10 @@ class DecisionArbiter:
                     if ReasonCode.LANE_CLAMP_AVOIDANCE not in seen:
                         reasons.append(ReasonCode.LANE_CLAMP_AVOIDANCE)
 
-        # Lane yoksa avoidance override'ını tamamen iptal etme seçeneği
-        if lane_required_for_avoidance and steer_src is not None and steer_src.name == "static_avoid":
+        # Lane yoksa avoidance override'ını tamamen iptal etme seçeneği.
+        # Not: Dinamik engelde (yaya) temel davranış (dur/bekle) lane'e bağlı değildir; bu kural sadece
+        # steer override'ı kapatır. Speed cap / stop, obstacle candidate'ı ile zaten uygulanır.
+        if lane_required_for_avoidance and steer_src is not None and steer_src.name in {"static_avoid", "dynamic_avoid"}:
             if lane is None or not lane.is_valid:
                 has_steer = False
                 steer = 0.0

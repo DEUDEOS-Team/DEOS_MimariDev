@@ -25,7 +25,8 @@ def generate_launch_description():
     - lidar_obstacle_node:  /points_downsampled -> /perception/lidar_obstacles (JSON String)
     - perception_fusion_node: stereo+lidar+imu -> /perception/* (Bool/Float32)
     - mission_planning_node: gps+imu + mission_file -> /planning/* (Float32/Bool/String)
-    - vehicle_controller_node: perception+planning -> /cmd_vel + /safety/emergency_stop (STM32 via micro-ROS)
+    - vehicle_controller_node: perception+planning -> /cmd_vel + /safety/emergency_stop
+    - stm32_bridge_node: /cmd_vel -> /stm32/* (STM32 via micro-ROS)
     """
 
     mission_file_arg = DeclareLaunchArgument(
@@ -49,6 +50,11 @@ def generate_launch_description():
         "hardware_motion_enable_timeout_s",
         default_value="0.5",
         description="STM32 mesajı gelmezse (olay bazlı akış) Pi tarafında fail-safe süresi (saniye)",
+    )
+    autonomy_enable_topic_arg = DeclareLaunchArgument(
+        "autonomy_enable_topic",
+        default_value="/hardware/autonomy_enable",
+        description="Otonom/Manuel geçiş topic'i (std_msgs/Bool): false=MANUEL, true=OTONOM",
     )
 
     require_go_signal_arg = DeclareLaunchArgument(
@@ -143,6 +149,8 @@ def generate_launch_description():
             "hardware_motion_enable_topic": LaunchConfiguration("hardware_motion_enable_topic"),
             "hardware_motion_enable_timeout_s": LaunchConfiguration("hardware_motion_enable_timeout_s"),
             "hardware_motion_enable_fail_safe_stop": True,
+            "autonomy_enable_topic": LaunchConfiguration("autonomy_enable_topic"),
+            "require_autonomy_enable": True,
         }],
         output="screen",
         respawn=True,
@@ -208,6 +216,32 @@ def generate_launch_description():
         respawn_delay=2,
     )
 
+    # STM32 Bridge: cmd_vel -> (speed_delta, steering_deg) Float32 topics
+    stm32_bridge_node = Node(
+        package="vehicle_controller",
+        executable="stm32_bridge_node",
+        name="stm32_bridge_node",
+        parameters=[{
+            "cmd_vel_topic": "/cmd_vel",
+            "motion_enable_topic": LaunchConfiguration("hardware_motion_enable_topic"),
+            "require_motion_enable": True,
+            "autonomy_enable_topic": LaunchConfiguration("autonomy_enable_topic"),
+            "require_autonomy_enable": True,
+            "speed_delta_topic": "/stm32/speed_delta_mps",
+            "speed_target_topic": "/stm32/speed_target_mps",
+            "publish_speed_delta": True,
+            "publish_speed_target": False,
+            "steering_deg_topic": "/stm32/steering_deg",
+            # Keep in sync with vehicle_controller_node max_steer_rads
+            "max_steer_rads": 1.0,
+            "steer_deg_limit": 540.0,
+            "round_decimals": 2,
+        }],
+        output="screen",
+        respawn=True,
+        respawn_delay=2,
+    )
+
     # Control
     vehicle_controller_node = Node(
         package="vehicle_controller",
@@ -220,6 +254,8 @@ def generate_launch_description():
             "hardware_motion_enable_topic": LaunchConfiguration("hardware_motion_enable_topic"),
             "hardware_motion_enable_timeout_s": LaunchConfiguration("hardware_motion_enable_timeout_s"),
             "hardware_motion_enable_fail_safe_stop": True,
+            "subscribe_autonomy_enable": True,
+            "autonomy_enable_topic": LaunchConfiguration("autonomy_enable_topic"),
         }],
         output="screen",
         respawn=True,
@@ -231,6 +267,7 @@ def generate_launch_description():
         centerlines_file_arg,
         hardware_motion_enable_topic_arg,
         hardware_motion_enable_timeout_arg,
+        autonomy_enable_topic_arg,
         require_go_signal_arg,
         tunnel_mandatory_arg,
         # === SENSORS (Raw Data Acquisition) ===
@@ -254,6 +291,7 @@ def generate_launch_description():
 
         # === CONTROL ===
         vehicle_controller_node,
+        stm32_bridge_node,
         
         # === PIPELINE ===
         # Sensors -> Perception -> Planning -> Controller -> /cmd_vel

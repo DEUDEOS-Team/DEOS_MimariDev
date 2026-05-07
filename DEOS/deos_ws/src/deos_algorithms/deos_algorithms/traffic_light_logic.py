@@ -139,7 +139,9 @@ class TrafficLightLogic:
                 mem.last_seen_time = now
                 mem.last_confidence = det.confidence
                 if det.estimated_distance_m is not None:
-                    mem.last_distance_m = det.estimated_distance_m
+                    # Keep nearest distance (distance and confidence are tracked separately).
+                    if mem.last_distance_m is None or float(det.estimated_distance_m) < float(mem.last_distance_m):
+                        mem.last_distance_m = float(det.estimated_distance_m)
                 if mem.frames_seen >= CONFIRM_FRAMES:
                     mem.confirmed = True
 

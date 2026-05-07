@@ -98,6 +98,8 @@ class ObstacleState:
     suggest_lane_change: bool = False
     road_blocked: bool = False
     waiting_for_dynamic_obstacle: bool = False
+    dynamic_avoid_active: bool = False
+    dynamic_avoidance_direction: Optional[str] = None
     avoidance_direction: Optional[str] = None
     behavior_mode: str = ObstacleBehavior.CLEAR
 
@@ -112,8 +114,11 @@ class ObstacleLogic:
         self._dynamic_clear_frames = 0
         self._static_commit_dir: Optional[str] = None
         self._static_commit_frames_left: int = 0
+        self._dynamic_stop_started_at: Optional[float] = None
+        self._tick_i: int = 0
 
     def update(self, detections: list[ObstacleDetection]) -> ObstacleState:
+        self._tick_i += 1
         safety_dets = [
             SafetyDetection(
                 x1=d.bbox_px[0],
@@ -173,6 +178,7 @@ class ObstacleLogic:
                     self._dynamic_clear_frames = 0
 
         if not self._dynamic_wait_active:
+            self._dynamic_stop_started_at = None
             if nearest is not None and nearest.distance_m <= DYNAMIC_SLOW_DISTANCE_M:
                 state.speed_cap_ratio = min(state.speed_cap_ratio, DYNAMIC_SLOW_SPEED_CAP)
                 state.behavior_mode = ObstacleBehavior.DYNAMIC_SLOW
@@ -188,6 +194,27 @@ class ObstacleLogic:
             state.reason = f"WAIT_DYNAMIC: {nearest.detection.class_name} at {nearest.distance_m:.1f}m"
         else:
             state.reason = f"WAIT_DYNAMIC: clearing {self._dynamic_clear_frames}/{DYNAMIC_CLEAR_FRAMES}"
+
+        # Two-stage dynamic behavior (competition heuristic):
+        # 1) Stop (wait) when pedestrian is too close.
+        # 2) After a short stop-hold, if LiDAR lateral offset exists, suggest a cautious pass on opposite side.
+        #    This is only a suggestion; lane constraint may clamp/disable it.
+        if nearest is None:
+            self._dynamic_stop_started_at = None
+            return
+
+        if self._dynamic_stop_started_at is None:
+            self._dynamic_stop_started_at = float(self._tick_i)
+
+        hold_ticks = 8  # ~8 frames in this pure-python loop; ROS node runs 20Hz => ~0.4s
+        ticks_waiting = float(self._tick_i) - float(self._dynamic_stop_started_at)
+        lat = float(nearest.lateral_m)
+        if ticks_waiting >= hold_ticks and abs(lat) >= 0.35:
+            state.dynamic_avoid_active = True
+            # Opposite side of obstacle lateral: obstacle on left => pass right, etc.
+            state.dynamic_avoidance_direction = "right" if lat > 0 else "left"
+            state.speed_cap_ratio = min(state.speed_cap_ratio, 0.2)
+            state.reason = f"AVOID_DYNAMIC_AFTER_STOP: dir={state.dynamic_avoidance_direction} lat={lat:+.2f}m"
 
     def _apply_static_avoidance(self, state: ObstacleState, static_threats: list[ThreatObservation]) -> None:
         nearest = self._nearest(static_threats)

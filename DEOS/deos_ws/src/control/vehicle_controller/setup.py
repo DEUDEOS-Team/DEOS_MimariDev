@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'vehicle_controller_node = vehicle_controller.vehicle_controller_node:main',
+            'stm32_bridge_node = vehicle_controller.stm32_bridge_node:main',
         ],
     },
 )

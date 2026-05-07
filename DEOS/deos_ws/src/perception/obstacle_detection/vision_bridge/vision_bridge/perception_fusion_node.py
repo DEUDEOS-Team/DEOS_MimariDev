@@ -11,7 +11,7 @@ from std_msgs.msg import Bool, Float32, String, Int32
 from deos_algorithms.obstacle_logic import ObstacleLogic
 from deos_algorithms.parking_logic import ParkingLogic
 from deos_algorithms.perception_fusion import fuse, parking_detections_from_signs
-from deos_algorithms.decision_arbiter import Candidate, DecisionArbiter, LaneBounds, ReasonCode
+from deos_algorithms.decision_arbiter import Candidate, DecisionArbiter, LaneBounds, ReasonCode, lane_contains_lateral
 from deos_algorithms.lane_violation import LaneViolationTracker, wheels_outside_lane
 from deos_algorithms.sensors.types import ImuSample, LidarObstacle, StereoBbox
 from deos_algorithms.slalom_logic import SlalomLogic
@@ -30,6 +30,9 @@ class PerceptionFusionNode(Node):
         self.declare_parameter("hardware_motion_enable_topic", "/hardware/motion_enable")
         self.declare_parameter("hardware_motion_enable_timeout_s", 0.5)
         self.declare_parameter("hardware_motion_enable_fail_safe_stop", True)
+        # Manuel/otonom ayrımı: otonom kapalıysa algı kararları yayınlamayı durdur (nötr publish)
+        self.declare_parameter("autonomy_enable_topic", "/hardware/autonomy_enable")
+        self.declare_parameter("require_autonomy_enable", True)
         # Sensör fail-safe (lokal planlama): veri yoksa hız düşür / dur
         self.declare_parameter("fail_safe_stop_on_all_sensors_lost", True)
         self.declare_parameter("lidar_missing_speed_cap", 0.20)   # engel için kritik
@@ -70,6 +73,10 @@ class PerceptionFusionNode(Node):
         # STM32 ilk "DEVAM" mesajını gönderene kadar güvenli tarafta kal
         self._motion_enable: bool = False
         self._motion_enable_stamp: float = 0.0
+        self._prev_motion_enable: bool = False
+        self._reset_requested: bool = False
+        self._autonomy_enable: bool = True
+        self._autonomy_stamp: float = 0.0
 
         # Planning -> Perception: park arama/manevra modu
         self._park_mode: bool = False
@@ -87,6 +94,7 @@ class PerceptionFusionNode(Node):
 
         motion_topic = str(self.get_parameter("hardware_motion_enable_topic").value)
         self.create_subscription(Bool, motion_topic, self._motion_enable_cb, 10)
+        self.create_subscription(Bool, str(self.get_parameter("autonomy_enable_topic").value), self._autonomy_cb, 10)
 
         self._pub_estop = self.create_publisher(Bool, "/perception/emergency_stop", 10)
         self._pub_speed = self.create_publisher(Float32, "/perception/speed_cap", 10)
@@ -106,8 +114,16 @@ class PerceptionFusionNode(Node):
         )
 
     def _motion_enable_cb(self, msg: Bool) -> None:
-        self._motion_enable = bool(msg.data)
+        new_val = bool(msg.data)
+        # Rising edge: manual -> autonomous start. Reset internal memories.
+        if new_val and not self._motion_enable:
+            self._reset_requested = True
+        self._motion_enable = new_val
         self._motion_enable_stamp = time.monotonic()
+
+    def _autonomy_cb(self, msg: Bool) -> None:
+        self._autonomy_enable = bool(msg.data)
+        self._autonomy_stamp = time.monotonic()
 
     def _park_mode_cb(self, msg: Bool) -> None:
         self._park_mode = bool(msg.data)
@@ -208,6 +224,14 @@ class PerceptionFusionNode(Node):
             self._pub_has_steer.publish(Bool(data=False))
             return
 
+        if bool(self.get_parameter("require_autonomy_enable").value) and not bool(self._autonomy_enable):
+            # Manual mode: publish neutral constraints (do not command stop/steer).
+            self._pub_estop.publish(Bool(data=False))
+            self._pub_speed.publish(Float32(data=1.0))
+            self._pub_steer.publish(Float32(data=0.0))
+            self._pub_has_steer.publish(Bool(data=False))
+            return
+
         if not self._motion_enable:
             # STM32: DUR — algoritma/model çalıştırma, güvenli kısıtları yayınla
             self._pub_estop.publish(Bool(data=True))
@@ -215,6 +239,25 @@ class PerceptionFusionNode(Node):
             self._pub_steer.publish(Float32(data=0.0))
             self._pub_has_steer.publish(Bool(data=False))
             return
+
+        if self._reset_requested:
+            # Clear logic memories on autonomous start.
+            try:
+                self._sign.reset()
+            except Exception:
+                pass
+            try:
+                self._light.reset()
+            except Exception:
+                pass
+            try:
+                self._slalom.reset()
+            except Exception:
+                pass
+            # Obstacle/Park logic have internal trackers; re-instantiate to fully reset.
+            self._obstacle = ObstacleLogic()
+            self._parking = ParkingLogic()
+            self._reset_requested = False
 
         stereo_fresh = (now - self._stereo_stamp) < self.STEREO_TIMEOUT_S
         lidar_fresh = (now - self._lidar_stamp) < self.LIDAR_TIMEOUT_S
@@ -231,7 +274,21 @@ class PerceptionFusionNode(Node):
         # - Slalom: stereo "cone" (LiDAR'dan koni sınıfı gelmiyor varsayımı).
         lidar_obs = frame.lidar_obstacle_dets
         stereo_obs = frame.stereo_obstacle_dets
-        obs_input = list(lidar_obs) + [d for d in stereo_obs if d.kind == "pedestrian"]
+        lane = self._lane_bounds if lane_fresh else None
+
+        # Same-lane verification (statik engel): Şerit sınırı tazeyse, şerit dışındaki statik engeller
+        # kaçınma / road_blocked tetiklemesin.
+        filtered_lidar_obs = list(lidar_obs)
+        if lane is not None and lane.is_valid:
+            filtered_lidar_obs = []
+            for d in lidar_obs:
+                if d.kind in {"barrier", "cone", "vehicle", "unknown"}:
+                    if lane_contains_lateral(lane, float(d.lateral_m)):
+                        filtered_lidar_obs.append(d)
+                else:
+                    filtered_lidar_obs.append(d)
+
+        obs_input = list(filtered_lidar_obs) + [d for d in stereo_obs if d.kind == "pedestrian"]
         slalom_input = [d for d in stereo_obs if d.kind == "cone"]
 
         obs_state = self._obstacle.update(obs_input)
@@ -315,6 +372,24 @@ class PerceptionFusionNode(Node):
                 )
             )
 
+        # Dinamik kaçınma (2 aşama): durduktan sonra lidar ile ters taraftan çok yavaş geç
+        # Kural: kaçınma yönü (steer override) sadece lane tazeyken aktif olsun; lane yoksa sadece dur/bekle.
+        if (
+            (lane is not None and lane.is_valid)
+            and bool(obs_state.dynamic_avoid_active)
+            and (obs_state.dynamic_avoidance_direction in {"left", "right"})
+        ):
+            steer_bias = -0.25 if obs_state.dynamic_avoidance_direction == "left" else 0.25
+            candidates.append(
+                Candidate(
+                    name="dynamic_avoid",
+                    emergency_stop=False,
+                    speed_cap=0.2,
+                    steer_override=float(steer_bias),
+                    reasons=[ReasonCode.DYNAMIC_AVOID],
+                )
+            )
+
         # Sensör fail-safe
         if not stereo_fresh and not lidar_fresh and bool(self.get_parameter("fail_safe_stop_on_all_sensors_lost").value):
             candidates.append(Candidate(name="failsafe", emergency_stop=True, speed_cap=0.0, reasons=[ReasonCode.ALL_SENSORS_LOST]))
@@ -324,7 +399,7 @@ class PerceptionFusionNode(Node):
             if not stereo_fresh:
                 candidates.append(Candidate(name="failsafe", emergency_stop=False, speed_cap=float(self.get_parameter("stereo_missing_speed_cap").value)))
 
-        lane = self._lane_bounds if lane_fresh else None
+        lane = lane
         decision = self._arbiter.arbitrate(
             candidates=candidates,
             lane=lane,
