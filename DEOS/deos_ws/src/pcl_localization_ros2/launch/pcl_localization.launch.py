@@ -3,6 +3,7 @@ import os
 import launch
 import launch.actions
 import launch.events
+import launch.substitutions
 
 import launch_ros
 import launch_ros.actions
@@ -20,19 +21,24 @@ def generate_launch_description():
 
     ld = launch.LaunchDescription()
 
+    cloud_topic = launch.substitutions.LaunchConfiguration('cloud_topic', default='/cloud_unstructured_fullframe')
+    publish_static_sensor_tfs = launch.substitutions.LaunchConfiguration('publish_static_sensor_tfs', default='false')
+
     lidar_tf = launch_ros.actions.Node(
+        condition=launch.conditions.IfCondition(publish_static_sensor_tfs),
         name='lidar_tf',
         package='tf2_ros',
         executable='static_transform_publisher',
-        arguments=['0','0','0','0','0','0','1','odom','velodyne']
-        )
-    
+        arguments=['0', '0', '0', '0', '0', '0', '1', 'odom', 'velodyne']
+    )
+
     imu_tf = launch_ros.actions.Node(
+        condition=launch.conditions.IfCondition(publish_static_sensor_tfs),
         name='imu_tf',
         package='tf2_ros',
         executable='static_transform_publisher',
-        arguments=['0','0','0','0','0','0','1','odom','imu_link']
-        )
+        arguments=['0', '0', '0', '0', '0', '0', '1', 'odom', 'imu_link']
+    )
 
     localization_param_dir = launch.substitutions.LaunchConfiguration(
         'localization_param_dir',
@@ -46,7 +52,7 @@ def generate_launch_description():
         namespace='',
         package='pcl_localization_ros2',
         executable='pcl_localization_node',
-        remappings=[('/cloud','/points_raw')],
+        remappings=[('/cloud', cloud_topic)],
         parameters=[localization_param_dir],
         output='screen')
 
@@ -91,6 +97,7 @@ def generate_launch_description():
     
     ld.add_action(pcl_localization)
     ld.add_action(lidar_tf)
+    ld.add_action(imu_tf)
     ld.add_action(to_inactive)
 
     return ld

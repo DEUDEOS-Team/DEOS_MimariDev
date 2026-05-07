@@ -1,7 +1,12 @@
+import os
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
@@ -188,11 +193,36 @@ def generate_launch_description():
     )
     
     # Localization - PCL based (scan matching)
-    pcl_localization_node = Node(
-        package='pcl_localization_ros2',
-        executable='pcl_localization_node',
-        name='pcl_localization_node',
-        output='screen',
+    pcl_localization_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory("pcl_localization_ros2"), "launch", "pcl_localization.launch.py")
+        ),
+        launch_arguments={
+            "localization_param_dir": os.path.join(get_package_share_directory("pcl_localization_ros2"), "param", "localization.yaml"),
+            "cloud_topic": "/cloud_unstructured_fullframe",
+            "publish_static_sensor_tfs": "false",
+        }.items(),
+    )
+
+    # EKF fusion (GPS + IMU) + navsat_transform (publishes /odom)
+    sensor_fusion_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory("sensor_fusion"), "launch", "sensorfus.launch.py")
+        )
+    )
+
+    # Level-3 fusion: prefer ICP when fresh, else EKF odom
+    final_odom_node = Node(
+        package="sensor_fusion",
+        executable="final_odom_node",
+        name="final_odom_node",
+        parameters=[{
+            "ekf_odom_topic": "/odom",
+            "icp_odom_topic": "/odometry/icp",
+            "out_topic": "/final_odom",
+            "icp_timeout_s": 0.2,
+        }],
+        output="screen",
         respawn=True,
         respawn_delay=2,
     )
@@ -209,6 +239,8 @@ def generate_launch_description():
             "require_go_signal": LaunchConfiguration("require_go_signal"),
             "go_topic": LaunchConfiguration("hardware_motion_enable_topic"),
             "heading_offset_deg": 0.0,
+            "heading_source": "final_odom",
+            "final_odom_topic": "/final_odom",
             "tunnel_mandatory": LaunchConfiguration("tunnel_mandatory"),
         }],
         output="screen",
@@ -284,7 +316,9 @@ def generate_launch_description():
         perception_fusion_node,
         
         # === LOCALIZATION (Position Estimation) ===
-        pcl_localization_node, # Scan matching: /odometry/icp, /tf (20 Hz)
+        sensor_fusion_launch,   # EKF: /odom
+        pcl_localization_launch, # Scan matching: /odometry/icp, /tf (20 Hz)
+        final_odom_node,        # /final_odom
 
         # === PLANNING ===
         mission_planning_node,

@@ -4,6 +4,7 @@ import json
 
 import rclpy
 from rclpy.node import Node
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu, NavSatFix
 from std_msgs.msg import Bool, Float32, String
 
@@ -60,6 +61,9 @@ class MissionPlanningNode(Node):
         self.declare_parameter("require_go_signal", True)
         self.declare_parameter("go_topic", "/hardware/motion_enable")
         self.declare_parameter("heading_offset_deg", 0.0)
+        # Ek mimari uyumu: heading kaynağı opsiyonel olarak /final_odom'dan alınabilir
+        self.declare_parameter("heading_source", "imu")  # "imu" | "final_odom"
+        self.declare_parameter("final_odom_topic", "/final_odom")
 
         mission_file = str(self.get_parameter("mission_file").value)
         centerlines_file = str(self.get_parameter("centerlines_file").value)
@@ -119,6 +123,7 @@ class MissionPlanningNode(Node):
 
         self._heading_deg = 0.0
         self._gps_stamp: float = 0.0
+        self._final_odom_stamp: float = 0.0
 
         self._last_steering = 0.0
         self._last_speed = 0.0
@@ -127,6 +132,7 @@ class MissionPlanningNode(Node):
 
         self.create_subscription(NavSatFix, "/gps/fix", self._gps_cb, 10)
         self.create_subscription(Imu, "/imu/data", self._imu_cb, 10)
+        self.create_subscription(Odometry, str(self.get_parameter("final_odom_topic").value), self._final_odom_cb, 10)
         self.create_subscription(String, "/perception/turn_permissions", self._turn_perm_cb, 10)
         self.create_subscription(String, "/perception/decision_debug", self._decision_debug_cb, 10)
         self.create_subscription(Bool, str(self.get_parameter("go_topic").value), self._go_cb, 10)
@@ -275,6 +281,17 @@ class MissionPlanningNode(Node):
 
     def _imu_cb(self, msg: Imu) -> None:
         q = msg.orientation
+        siny = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        raw_deg = math.degrees(math.atan2(siny, cosy)) % 360.0
+        if str(self.get_parameter("heading_source").value).strip().lower() == "imu":
+            self._heading_deg = (raw_deg + self._heading_offset) % 360.0
+
+    def _final_odom_cb(self, msg: Odometry) -> None:
+        self._final_odom_stamp = time.monotonic()
+        if str(self.get_parameter("heading_source").value).strip().lower() != "final_odom":
+            return
+        q = msg.pose.pose.orientation
         siny = 2.0 * (q.w * q.z + q.x * q.y)
         cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         raw_deg = math.degrees(math.atan2(siny, cosy)) % 360.0

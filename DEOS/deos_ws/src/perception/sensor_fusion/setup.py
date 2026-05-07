@@ -29,6 +29,7 @@ setup(
     entry_points={
         'console_scripts': [
             'lidar_obstacle_node = sensor_fusion.lidar_obstacle_node:main',
+            'final_odom_node = sensor_fusion.final_odom_node:main',
         ],
     },
 )
