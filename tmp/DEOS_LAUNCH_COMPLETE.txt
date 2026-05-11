@@ -1,0 +1,425 @@
+================================================================================
+DEOS ROS2 PIPELINE - COMPLETE LAUNCH GUIDE
+Container: c5f464a64ab3 (deos_mimaridev-deos)
+Status: ✓ READY TO LAUNCH
+================================================================================
+
+BUILD SUCCESSFUL!
+================================================================================
+
+✓ deos_algorithms - Algorithm library
+✓ sensor_fusion - EKF (GPS + IMU fusion)
+✓ mission_planning - Path planning & mission management
+✓ vehicle_controller - Motor control & safety
+✓ vehicle_bringup - Master launch orchestration
+✓ vision_bridge - Perception (camera/LiDAR)
+✓ micro_ros_agent - STM32 bridge
+
+================================================================================
+COMPLETE LAUNCH SEQUENCE
+================================================================================
+
+TERMINAL 1: Connect to container
+
+docker exec -it c5f464a64ab3 bash
+
+Inside container:
+
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+source install/setup.bash
+
+================================================================================
+TERMINAL 1: LAUNCH MAIN SYSTEM (Master Launch)
+================================================================================
+
+Option A: WITHOUT mission file (passive waypoint mode)
+
+ros2 launch vehicle_bringup main.launch.py
+
+Option B: WITH mission file (active autonomous navigation)
+
+ros2 launch vehicle_bringup main.launch.py \
+  mission_file:=/path/to/your_mission.geojson
+
+Option C: WITH custom parameters
+
+ros2 launch vehicle_bringup main.launch.py \
+  mission_file:=/path/to/mission.geojson \
+  hardware_motion_enable_topic:=/hardware/motion_enable \
+  hardware_motion_enable_timeout_s:=0.5 \
+  safety_emergency_stop_pulse_count:=3
+
+WHAT HAPPENS:
+
+Startup sequence (automatic):
+  1. Sensors initialize (LiDAR, GPS, Camera)
+  2. Sensor Fusion (EKF) starts fusing GPS+IMU → /odom
+  3. Perception (obstacle detection) starts
+  4. Mission Planning initializes (if mission_file provided)
+  5. Vehicle Controller starts listening to /cmd_vel
+  6. micro-ROS Agent bridges to STM32
+
+System waiting for:
+  ✓ Sensors active
+  ✓ /odom publishing (position)
+  ✓ /perception/emergency_stop ready
+  ✓ /hardware/motion_enable from STM32
+
+================================================================================
+TERMINAL 2: MONITOR SYSTEM (in new terminal in container)
+================================================================================
+
+Check all nodes running:
+
+ros2 node list
+
+Expected output:
+  /ekf_filter_node (sensor fusion)
+  /navsat_transform_node (GPS conversion)
+  /stereo_detector_node (camera obstacles)
+  /perception_fusion_node (obstacle decisions)
+  /lidar_obstacle_node (LiDAR obstacles)
+  /mission_planning_node (route planning)
+  /vehicle_controller_node (motor control)
+  /micro_ros_agent (STM32 bridge)
+
+Check all topics:
+
+ros2 topic list
+
+Key topics to verify:
+  /hardware/motion_enable (STM32 input)
+  /odom (vehicle position from EKF)
+  /perception/emergency_stop (safety signal)
+  /perception/speed_cap (max allowed speed)
+  /perception/lidar_obstacles (JSON)
+  /perception/stereo_detections (JSON)
+  /planning/current_task (mission status)
+  /planning/steering_ref (planned steering)
+  /cmd_vel (motor velocity output)
+  /safety/emergency_stop (safety pulse output)
+
+================================================================================
+TERMINAL 3: TEST SAFETY CHAIN (optional, for debugging)
+================================================================================
+
+Test 1: Simulate STM32 sending STOP (DUR) command
+
+ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: false}" -1
+
+Expected behavior (within 1 second):
+  ros2 topic echo /perception/emergency_stop --once
+  # Should output: data: true
+  
+  ros2 topic echo /perception/speed_cap --once
+  # Should output: data: 0.0
+  
+  ros2 topic echo /cmd_vel --once
+  # Should output: (nothing or zero velocities)
+
+Test 2: Simulate STM32 sending CONTINUE (DEVAM) command
+
+ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: true}" -1
+
+Expected behavior (within 1 second):
+  ros2 topic echo /perception/emergency_stop --once
+  # Should output: data: false (if no obstacles)
+  
+  ros2 topic echo /cmd_vel --once
+  # Should show velocity commands if planning active
+
+Test 3: Monitor continuous flow
+
+# Terminal 1 (sensor data)
+watch "ros2 topic hz /odom /cloud_all_fields_fullframe /imu/data"
+
+# Terminal 2 (perception/planning data)
+watch "ros2 topic hz /perception/stereo_detections /planning/steering_ref /cmd_vel"
+
+# Terminal 3 (safety signals)
+watch "ros2 topic echo /perception/emergency_stop"
+
+================================================================================
+MISSION FILE FORMAT (GeoJSON)
+================================================================================
+
+Create mission file: mission.geojson
+
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [26.1234, 38.4267]
+      },
+      "properties": {
+        "order": 1,
+        "task": "drive_to_waypoint",
+        "speed": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [26.1250, 38.4280]
+      },
+      "properties": {
+        "order": 2,
+        "task": "drive_to_waypoint",
+        "speed": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [26.1240, 38.4290]
+      },
+      "properties": {
+        "order": 3,
+        "task": "stop",
+        "speed": 0.0
+      }
+    }
+  ]
+}
+
+Launch with mission:
+
+ros2 launch vehicle_bringup main.launch.py mission_file:=/path/to/mission.geojson
+
+Monitor mission progress:
+
+ros2 topic echo /planning/current_task
+ros2 topic echo /planning/arrived
+
+================================================================================
+TOPIC MAP - COMPLETE DATA FLOW
+================================================================================
+
+From SETUP_ROS2_PIPELINE.md:
+
+INPUT (STM32 Command):
+  /hardware/motion_enable (Bool)
+    - false → System STOP (safe state)
+    - true → System CONTINUE (normal operation)
+    - Timeout (~0.5s) → Auto STOP (fail-safe)
+
+SENSOR INPUTS:
+  /gps/fix → /odom (fused position)
+  /imu/data → /odom (fused heading)
+  /cloud_all_fields_fullframe → /perception/lidar_obstacles (JSON)
+  /camera/color/image_raw → /perception/stereo_detections (JSON)
+
+PERCEPTION DECISIONS:
+  /perception/emergency_stop (Bool)
+    - true → Emergency detected
+    - false → Safe
+  
+  /perception/speed_cap (Float32, 0..1)
+    - 0.0 → Max stop
+    - 0.5 → 50% max speed
+    - 1.0 → Full speed
+  
+  /perception/steering_override (Float32, -1..+1)
+    - -1.0 → Full left
+    - 0.0 → Straight
+    - +1.0 → Full right
+  
+  /perception/has_steering_override (Bool)
+    - true → Using perception steering
+    - false → Using planning steering
+
+PLANNING OUTPUT:
+  /planning/steering_ref (Float32, -1..+1)
+    - Planned steering from mission
+  
+  /planning/speed_limit (Float32, 0..1)
+    - Planned speed from mission
+  
+  /planning/current_task (String)
+    - Current mission task name
+  
+  /planning/arrived (Bool)
+    - Mission complete
+
+FINAL CONTROL OUTPUT:
+  /cmd_vel (Twist)
+    - linear.x: Forward velocity (m/s)
+    - angular.z: Rotation rate (rad/s)
+    - Combines perception limits + planning commands
+  
+  /safety/emergency_stop (Bool)
+    - Pulsed output when emergency triggered
+    - NOT continuous (no spam)
+    - Used to trigger motor E-stop via hardware
+
+================================================================================
+VERIFY EACH STAGE
+================================================================================
+
+Stage 1: Sensors Active
+  ros2 topic hz /odom              # Should show ~30 Hz
+  ros2 topic hz /cloud_all_fields_fullframe  # Should show ~20 Hz
+  ros2 topic hz /imu/data          # Should show ~100 Hz
+  ros2 topic echo /odom --once     # Should show position, heading, velocity
+
+Stage 2: Perception Active
+  ros2 topic echo /perception/stereo_detections --once
+  # Should show JSON with detected objects
+  
+  ros2 topic echo /perception/lidar_obstacles --once
+  # Should show JSON with LiDAR detections
+  
+  ros2 topic echo /perception/emergency_stop --once
+  # Should show Bool (true/false based on safety)
+
+Stage 3: Planning Active (if mission file provided)
+  ros2 topic echo /planning/current_task --once
+  # Should show task name from mission
+  
+  ros2 topic echo /planning/steering_ref --once
+  # Should show planned steering (-1..+1)
+  
+  ros2 topic echo /planning/speed_limit --once
+  # Should show planned speed (0..1)
+
+Stage 4: Control Active
+  ros2 topic echo /cmd_vel --once
+  # Should show velocity commands combining all inputs
+  
+  ros2 topic hz /cmd_vel
+  # Should show publishing rate (~15 Hz typically)
+
+Stage 5: Safety Chain
+  ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: false}" -1
+  # Send STOP command
+  
+  ros2 topic echo /perception/emergency_stop --once
+  # Should show: data: true (within 1 second)
+  
+  ros2 topic echo /cmd_vel --once
+  # Should show: (nothing or zero) - controller holds
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Problem: Nodes not starting
+
+Solution:
+  1. Check build: colcon list --format=compact
+  2. Source install: source /ros2_ws/install/setup.bash
+  3. Check launch file: ls -la /ros2_ws/src/vehicle_bringup/launch/main.launch.py
+  4. Check logs: ros2 node info /ekf_filter_node
+  
+Problem: No /odom topic
+
+Solution:
+  1. Check GPS has fix: ros2 topic echo /gps/fix --once
+  2. Check IMU active: ros2 topic echo /imu/data --once
+  3. Check EKF node: ros2 node info /ekf_filter_node
+  4. View EKF errors: ros2 topic echo /parameter_events --once
+  
+Problem: /perception/emergency_stop always true
+
+Solution:
+  1. Check sensors working: ros2 topic hz /cloud_all_fields_fullframe
+  2. Check perception logic in vision_bridge
+  3. Manually test: ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: true}"
+  
+Problem: /cmd_vel not publishing
+
+Solution:
+  1. Check /odom exists: ros2 topic hz /odom
+  2. Check /perception/emergency_stop: ros2 topic echo /perception/emergency_stop --once
+  3. Check planning: ros2 node info /mission_planning_node
+  4. Check controller: ros2 node info /vehicle_controller_node
+  
+Problem: STM32 not receiving commands
+
+Solution:
+  1. Check micro-ROS agent: ros2 node list | grep micro
+  2. Verify IP/Port: docker logs 9bb1d2d27d46
+  3. Test connectivity: ros2 topic pub /test_topic ... (should see on STM32 side)
+
+================================================================================
+QUICK START (Copy-Paste)
+================================================================================
+
+docker exec -it c5f464a64ab3 bash
+
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+source install/setup.bash
+
+# Launch without mission (passive mode)
+ros2 launch vehicle_bringup main.launch.py
+
+# Or with mission file
+ros2 launch vehicle_bringup main.launch.py mission_file:=/path/to/mission.geojson
+
+# In another terminal, monitor:
+docker exec c5f464a64ab3 bash -c "source /opt/ros/jazzy/setup.bash && source /ros2_ws/install/setup.bash && ros2 node list"
+
+docker exec c5f464a64ab3 bash -c "source /opt/ros/jazzy/setup.bash && source /ros2_ws/install/setup.bash && ros2 topic hz /odom /cmd_vel"
+
+================================================================================
+COMPLETE SYSTEM ARCHITECTURE
+================================================================================
+
+STM32 (Hardware)
+  ↓ UDP port 8888
+micro_ros_agent ← bridges to ROS 2 graph
+  ↓
+/hardware/motion_enable (DUR/DEVAM command)
+  ↓ (dual input)
+  ├→ perception_fusion_node
+  │   ├→ Input: /stereo_detections, /lidar_obstacles
+  │   ├→ Output: /perception/emergency_stop, /perception/speed_cap
+  │
+  └→ vehicle_controller_node
+      ├→ Input: /cmd_vel, /hardware/motion_enable
+      ├→ Safety lock: /perception/emergency_stop
+      └→ Output: Motor PWM, /safety/emergency_stop pulse
+  
+Parallel streams:
+  
+  Sensor Fusion:
+    /gps/fix + /imu/data → ekf_filter_node → /odom
+  
+  Perception:
+    /cloud_all_fields_fullframe → lidar_obstacle_node → /lidar_obstacles
+    /camera/color/image_raw → stereo_detector_node → /stereo_detections
+  
+  Planning:
+    /odom + mission_file → mission_planning_node → /cmd_vel
+  
+  Control:
+    /cmd_vel + /perception/emergency_stop → vehicle_controller_node → Motors
+
+Fail-safe chain:
+  STM32 STOP (false) → /perception/emergency_stop → /cmd_vel held → Motors safe
+  STM32 timeout (~0.5s) → auto STOP → same result
+  Perception detects danger → /perception/emergency_stop → Motors safe
+
+================================================================================
+SUCCESS INDICATORS
+================================================================================
+
+When system is running correctly, you should see:
+
+✓ 8+ nodes in ros2 node list
+✓ 15+ topics in ros2 topic list
+✓ /odom publishing at ~30 Hz
+✓ /perception/emergency_stop status changes (false=safe, true=danger)
+✓ /cmd_vel publishing when STM32 sends CONTINUE
+✓ Motors respond to mission commands
+✓ Emergency stop works (motors halt on STOP command)
+✓ Recovery works (motors resume on CONTINUE command)
+
+================================================================================

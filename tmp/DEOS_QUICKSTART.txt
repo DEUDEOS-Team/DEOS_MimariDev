@@ -1,0 +1,416 @@
+================================================================================
+DEOS ROS2 PIPELINE - QUICK START GUIDE
+Container: c5f464a64ab3 (deos_mimaridev-deos)
+Status: ✓ READY TO LAUNCH
+================================================================================
+
+BUILD STATUS: ✓ SUCCESS
+================================================================================
+
+✓ deos_algorithms
+✓ sensor_fusion  
+✓ mission_planning
+✓ vehicle_controller
+✓ vehicle_bringup
+
+Packages verified and ready!
+
+================================================================================
+LAUNCH THE SYSTEM - OPTION 1: SIMPLE (No Mission)
+================================================================================
+
+docker exec -it c5f464a64ab3 bash
+
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+source install/setup.bash
+
+ros2 launch vehicle_bringup main.launch.py
+
+This launches in PASSIVE mode (no autonomous mission):
+  ✓ Sensors acquire data
+  ✓ EKF fuses GPS + IMU → /odom
+  ✓ Perception processes sensors
+  ✓ Planning ready (awaiting waypoints)
+  ✓ Controller ready (awaiting /cmd_vel)
+  ✓ Waiting for STM32 on /hardware/motion_enable
+
+================================================================================
+LAUNCH THE SYSTEM - OPTION 2: WITH MISSION (Autonomous)
+================================================================================
+
+docker exec -it c5f464a64ab3 bash
+
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+source install/setup.bash
+
+ros2 launch vehicle_bringup main.launch.py mission_file:=/path/to/mission.geojson
+
+Replace /path/to/mission.geojson with your actual mission file path.
+
+This launches in ACTIVE mode (autonomous navigation):
+  ✓ All sensors + fusion + perception
+  ✓ Loads mission from GeoJSON file
+  ✓ Plans path to first waypoint
+  ✓ Generates /cmd_vel commands
+  ✓ Motors execute commands (if STM32 sends CONTINUE)
+
+================================================================================
+LAUNCH THE SYSTEM - OPTION 3: WITH CUSTOM PARAMETERS
+================================================================================
+
+ros2 launch vehicle_bringup main.launch.py \
+  mission_file:=/path/to/mission.geojson \
+  hardware_motion_enable_topic:=/hardware/motion_enable \
+  hardware_motion_enable_timeout_s:=0.5
+
+Parameters:
+  - mission_file: Path to GeoJSON mission file (optional)
+  - hardware_motion_enable_topic: Topic for STM32 commands (default: /hardware/motion_enable)
+  - hardware_motion_enable_timeout_s: Timeout before auto-STOP (default: 0.5s)
+
+================================================================================
+MONITOR THE SYSTEM - TERMINAL 2
+================================================================================
+
+docker exec -it c5f464a64ab3 bash
+
+source /opt/ros/jazzy/setup.bash && source /ros2_ws/install/setup.bash
+
+# Check all nodes running
+ros2 node list
+
+Expected nodes:
+  /ekf_filter_node
+  /navsat_transform_node
+  /mission_planning_node
+  /vehicle_controller_node
+  /perception_fusion_node
+  /stereo_detector_node
+  /lidar_obstacle_node
+  /micro_ros_agent
+
+# Check all topics
+ros2 topic list
+
+# Monitor key topics
+ros2 topic hz /odom                    # Position (should be ~30 Hz)
+ros2 topic hz /cmd_vel                 # Motor commands (should be ~15 Hz)
+ros2 topic echo /perception/emergency_stop --once    # Safety status
+
+# View current position
+ros2 topic echo /odom --once
+
+# View mission status (if running with mission)
+ros2 topic echo /planning/current_task --once
+ros2 topic echo /planning/arrived --once
+
+================================================================================
+TOPIC SUMMARY (From SETUP_ROS2_PIPELINE.md)
+================================================================================
+
+STM32 Input:
+  /hardware/motion_enable (Bool)
+    - false → STOP (safe state)
+    - true → CONTINUE (normal operation)
+
+Sensor Outputs:
+  /odom (30 Hz)
+    - Vehicle position + heading + velocities
+  /perception/stereo_detections (JSON)
+    - Camera-detected objects
+  /perception/lidar_obstacles (JSON)
+    - LiDAR-detected obstacles
+
+Perception Decisions:
+  /perception/emergency_stop (Bool)
+    - true → Emergency detected (STOP!)
+    - false → Safe to proceed
+  /perception/speed_cap (Float32, 0..1)
+    - Maximum allowed speed (0=stop, 1=full)
+  /perception/steering_override (Float32, -1..+1)
+    - Override steering if needed
+
+Planning Outputs:
+  /planning/current_task (String)
+    - Current mission task name
+  /planning/steering_ref (Float32, -1..+1)
+    - Planned steering command
+  /planning/speed_limit (Float32, 0..1)
+    - Planned speed limit
+  /planning/arrived (Bool)
+    - Reached current waypoint
+
+Control Outputs:
+  /cmd_vel (Twist)
+    - Motor velocity commands (combines all inputs)
+    - linear.x: Forward speed (m/s)
+    - angular.z: Turn rate (rad/s)
+  /safety/emergency_stop (Bool)
+    - Emergency stop pulse output (to STM32 hardware)
+
+================================================================================
+TEST SAFETY CHAIN
+================================================================================
+
+Terminal 1: Let pipeline run
+
+Terminal 2: Test STOP command
+
+ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: false}" -1
+
+Verify (should happen within 1 second):
+  ros2 topic echo /perception/emergency_stop --once
+  # Should show: data: true
+  
+  ros2 topic echo /perception/speed_cap --once
+  # Should show: data: 0.0
+  
+  ros2 topic echo /cmd_vel --once
+  # Should show: (nothing or all zeros)
+
+Test CONTINUE command:
+
+ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: true}" -1
+
+Verify:
+  ros2 topic echo /perception/emergency_stop --once
+  # Should show: data: false (if no obstacles)
+  
+  ros2 topic echo /cmd_vel --once
+  # Should show velocity commands
+
+================================================================================
+MISSION FILE FORMAT (GeoJSON)
+================================================================================
+
+Create file: mission.geojson
+
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [26.1234, 38.4267]
+      },
+      "properties": {
+        "order": 1,
+        "task": "drive_to_waypoint",
+        "speed": 1.0
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [26.1250, 38.4280]
+      },
+      "properties": {
+        "order": 2,
+        "task": "drive_to_waypoint",
+        "speed": 0.5
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [26.1240, 38.4290]
+      },
+      "properties": {
+        "order": 3,
+        "task": "stop",
+        "speed": 0.0
+      }
+    }
+  ]
+}
+
+Coordinates format: [longitude, latitude]
+Order: Sequential waypoints to visit
+
+Launch with mission:
+
+ros2 launch vehicle_bringup main.launch.py mission_file:=/path/to/mission.geojson
+
+Monitor progress:
+
+ros2 topic echo /planning/current_task          # Current waypoint
+ros2 topic echo /planning/arrived               # Waypoint reached?
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Error: "not found: /ros2_ws/install/..."
+  Fix: 
+    1. cd /ros2_ws
+    2. rm -rf build install log
+    3. source /opt/ros/jazzy/setup.bash
+    4. colcon build --packages-select deos_algorithms sensor_fusion mission_planning vehicle_controller vehicle_bringup --symlink-install
+    5. source install/setup.bash
+
+Error: "Package not found: deos_algorithms"
+  Fix:
+    1. Verify build: ros2 pkg list | grep deos
+    2. If not found, rebuild: colcon build --symlink-install
+    3. source install/setup.bash
+
+Error: "Launch file not found"
+  Fix:
+    1. Check file exists: ls -la /ros2_ws/src/vehicle_bringup/launch/main.launch.py
+    2. If missing, must be created with proper ROS 2 structure
+    3. Rebuild: colcon build --symlink-install
+
+Error: No nodes showing up
+  Fix:
+    1. Verify launch file starts correctly: ros2 launch vehicle_bringup main.launch.py
+    2. Check logs: ros2 launch vehicle_bringup main.launch.py 2>&1 | head -50
+    3. Verify dependencies installed
+
+Error: /odom not publishing
+  Fix:
+    1. Check GPS has fix: ros2 topic echo /gps/fix --once
+    2. Check IMU active: ros2 topic echo /imu/data --once
+    3. Both must have data before EKF publishes /odom
+    4. Check EKF node: ros2 node info /ekf_filter_node
+
+Error: Motors not moving despite /cmd_vel
+  Fix:
+    1. Check /hardware/motion_enable: publish true (CONTINUE)
+    2. Check /perception/emergency_stop: should be false
+    3. Check /cmd_vel has non-zero values: ros2 topic echo /cmd_vel --once
+    4. Verify motor hardware connections (USB/serial/GPIO)
+
+================================================================================
+DOCKER COMPOSE (If using compose file)
+================================================================================
+
+Start all services:
+
+docker compose up -d micro_ros_agent deos
+
+Enter container:
+
+docker compose exec deos bash
+
+Inside container:
+
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+source install/setup.bash
+
+Launch system:
+
+ros2 launch vehicle_bringup main.launch.py
+
+Check micro-ROS agent:
+
+docker logs 9bb1d2d27d46 | tail -20
+
+================================================================================
+COMPLETE DATA FLOW
+================================================================================
+
+When running:
+
+Sensors (hardware)
+  ↓
+LiDAR: /cloud_all_fields_fullframe (20 Hz)
+GPS: /gps/fix (10 Hz, after 60s fix time)
+Camera: /camera/color/image_raw (30 Hz)
+IMU: /imu/data (100 Hz)
+  ↓
+Sensor Fusion (EKF)
+  ├→ /odom (fused position at 30 Hz)
+  ├→ /odometry/gps (GPS in meters)
+  └→ /tf (coordinate transforms)
+  ↓
+Perception (vision_bridge + lidar_obstacle)
+  ├→ /perception/stereo_detections (JSON)
+  ├→ /perception/lidar_obstacles (JSON)
+  ├→ /perception/emergency_stop (Bool)
+  └→ /perception/speed_cap (Float32)
+  ↓
+Planning (mission_planning)
+  ├→ /planning/steering_ref (Float32)
+  ├→ /planning/speed_limit (Float32)
+  ├→ /planning/current_task (String)
+  └→ /planning/arrived (Bool)
+  ↓
+Control (vehicle_controller + /hardware/motion_enable)
+  ├→ /cmd_vel (Twist - motor commands)
+  └→ /safety/emergency_stop (Bool pulse)
+  ↓
+STM32 via micro-ROS Agent
+  ↓
+Motors move!
+
+Feedback loop:
+  Motors execute command
+  LiDAR/GPS update position
+  Perception re-evaluates
+  Planning adjusts path
+  Controller sends new command
+  Repeat (30 Hz)
+
+================================================================================
+SUCCESS VERIFICATION
+================================================================================
+
+System is working correctly if you see:
+
+✓ 8+ nodes in ros2 node list
+✓ 15+ topics in ros2 topic list
+✓ /odom publishing at ~30 Hz
+  ros2 topic hz /odom
+  
+✓ /cmd_vel publishing
+  ros2 topic hz /cmd_vel
+  
+✓ Safety chain works
+  ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: false}" -1
+  # /perception/emergency_stop should become true within 1 second
+  
+✓ Mission progresses (if running with mission)
+  ros2 topic echo /planning/current_task --once
+  # Should show current waypoint name
+
+================================================================================
+QUICK COPY-PASTE COMMANDS
+================================================================================
+
+Setup and launch (no mission):
+
+docker exec -it c5f464a64ab3 bash
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+source install/setup.bash
+ros2 launch vehicle_bringup main.launch.py
+
+Setup and launch (with mission):
+
+docker exec -it c5f464a64ab3 bash
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+source install/setup.bash
+ros2 launch vehicle_bringup main.launch.py mission_file:=/ros2_ws/mission.geojson
+
+Monitor in new terminal:
+
+docker exec -it c5f464a64ab3 bash
+source /opt/ros/jazzy/setup.bash && source /ros2_ws/install/setup.bash
+ros2 node list
+ros2 topic list
+ros2 topic hz /odom /cmd_vel
+
+Test safety:
+
+docker exec -it c5f464a64ab3 bash
+source /opt/ros/jazzy/setup.bash && source /ros2_ws/install/setup.bash
+ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: false}" -1
+
+================================================================================

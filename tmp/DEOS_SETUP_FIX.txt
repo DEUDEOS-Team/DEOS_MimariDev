@@ -1,0 +1,429 @@
+================================================================================
+DEOS ROS2 PIPELINE - DIRECTORY FIX & COMPLETE SETUP
+Container: c5f464a64ab3
+Architecture: deos_mimaridev-deos
+================================================================================
+
+PROBLEM: Missing ament_package module
+ERROR: ModuleNotFoundError: No module named 'ament_package'
+
+SOLUTION: Install missing dependencies and fix directory structure
+
+================================================================================
+STEP 1: FIX ENVIRONMENT & DEPENDENCIES
+================================================================================
+
+Run in container:
+
+docker exec -it c5f464a64ab3 bash
+
+Inside container:
+
+# Install missing Python packages
+pip install ament-package
+
+# Or reinstall ROS 2 packages
+apt-get update
+apt-get install -y python3-ament-cmake-core
+
+# Clean build cache
+cd /ros2_ws
+rm -rf build install log
+
+# Setup environment properly
+source /opt/ros/jazzy/setup.bash
+
+# Rebuild
+colcon build --symlink-install
+
+================================================================================
+STEP 2: VERIFY DIRECTORY STRUCTURE
+================================================================================
+
+Expected structure:
+
+/ros2_ws/src/
+├── deos_algorithms/                (Algorithm libraries)
+│   ├── package.xml
+│   ├── setup.py
+│   └── deos_algorithms/
+│       ├── __init__.py
+│       ├── safety_logic.py
+│       ├── traffic_sign_logic.py
+│       ├── traffic_light_logic.py
+│       ├── obstacle_logic.py
+│       ├── slalom_logic.py
+│       ├── parking_logic.py
+│       ├── geojson_mission_reader.py
+│       ├── waypoint_manager.py
+│       ├── mission_manager.py
+│       └── perception_fusion.py
+│
+├── perception/
+│   ├── package.xml
+│   ├── launch/
+│   │   └── perception.launch.py
+│   └── obstacle_detection/
+│       └── vision_bridge/
+│           ├── package.xml
+│           ├── setup.py
+│           ├── launch/
+│           │   └── vision_bridge.launch.py
+│           └── vision_bridge/
+│               ├── __init__.py
+│               ├── stereo_detector_node.py
+│               └── perception_fusion_node.py
+│
+├── sensor_fusion/
+│   ├── package.xml
+│   ├── setup.py
+│   ├── launch/
+│   │   └── sensorfus.launch.py
+│   └── sensor_fusion/
+│       ├── __init__.py
+│       ├── lidar_obstacle_node.py
+│       └── ekf_node.py
+│
+├── planning/
+│   ├── package.xml
+│   ├── launch/
+│   │   └── planning.launch.py
+│   └── mission_planning/
+│       ├── package.xml
+│       ├── setup.py
+│       ├── mission_planning/
+│       │   ├── __init__.py
+│       │   └── mission_planning_node.py
+│       └── launch/
+│           └── mission_planning.launch.py
+│
+├── control/
+│   ├── vehicle_controller/
+│   │   ├── package.xml
+│   │   ├── setup.py
+│   │   ├── vehicle_controller/
+│   │   │   ├── __init__.py
+│   │   │   └── vehicle_controller_node.py
+│   │   └── launch/
+│   │       └── vehicle_controller.launch.py
+│   └── micro_ros_agent/
+│       ├── package.xml
+│       └── ...
+│
+├── vehicle_bringup/
+│   ├── package.xml
+│   ├── setup.py
+│   ├── launch/
+│   │   └── main.launch.py    ← MASTER LAUNCH FILE
+│   └── vehicle_bringup/
+│       └── __init__.py
+│
+└── sensors/
+    ├── lidar/
+    ├── camera/
+    └── imu/
+
+Verify in container:
+
+docker exec c5f464a64ab3 bash -c "find /ros2_ws/src -maxdepth 2 -type f -name 'package.xml' | sort"
+
+Should show all package.xml files in correct locations.
+
+================================================================================
+STEP 3: FIX PACKAGE.XML FILES
+================================================================================
+
+Each package needs a proper package.xml. Check:
+
+deos_algorithms/package.xml:
+  <?xml version="1.0"?>
+  <package format="3">
+    <name>deos_algorithms</name>
+    <version>0.0.0</version>
+    <description>DEOS algorithm library</description>
+    <maintainer email="dev@deos.com">DEOS</maintainer>
+    <license>TODO</license>
+    <buildtool_depend>ament_python</buildtool_depend>
+    <export>
+      <build_type>ament_python</build_type>
+    </export>
+  </package>
+
+perception/package.xml:
+  <?xml version="1.0"?>
+  <package format="3">
+    <name>perception</name>
+    <version>0.0.0</version>
+    <description>Perception meta-package</description>
+    <maintainer email="dev@deos.com">DEOS</maintainer>
+    <license>TODO</license>
+    <buildtool_depend>ament_cmake</buildtool_depend>
+    <exec_depend>vision_bridge</exec_depend>
+    <export>
+      <build_type>ament_cmake</build_type>
+    </export>
+  </package>
+
+sensor_fusion/package.xml:
+  <?xml version="1.0"?>
+  <package format="3">
+    <name>sensor_fusion</name>
+    <version>0.0.0</version>
+    <description>Sensor fusion (EKF)</description>
+    <maintainer email="dev@deos.com">DEOS</maintainer>
+    <license>TODO</license>
+    <buildtool_depend>ament_python</buildtool_depend>
+    <exec_depend>robot_localization</exec_depend>
+    <export>
+      <build_type>ament_python</build_type>
+    </export>
+  </package>
+
+mission_planning/package.xml:
+  <?xml version="1.0"?>
+  <package format="3">
+    <name>mission_planning</name>
+    <version>0.0.0</version>
+    <description>Mission planning node</description>
+    <maintainer email="dev@deos.com">DEOS</maintainer>
+    <license>TODO</license>
+    <buildtool_depend>ament_python</buildtool_depend>
+    <export>
+      <build_type>ament_python</build_type>
+    </export>
+  </package>
+
+vehicle_controller/package.xml:
+  <?xml version="1.0"?>
+  <package format="3">
+    <name>vehicle_controller</name>
+    <version>0.0.0</version>
+    <description>Vehicle control node</description>
+    <maintainer email="dev@deos.com">DEOS</maintainer>
+    <license>TODO</license>
+    <buildtool_depend>ament_python</buildtool_depend>
+    <export>
+      <build_type>ament_python</build_type>
+    </export>
+  </package>
+
+vehicle_bringup/package.xml:
+  <?xml version="1.0"?>
+  <package format="3">
+    <name>vehicle_bringup</name>
+    <version>0.0.0</version>
+    <description>Vehicle bringup (master launch)</description>
+    <maintainer email="dev@deos.com">DEOS</maintainer>
+    <license>TODO</license>
+    <buildtool_depend>ament_python</buildtool_depend>
+    <exec_depend>sensor_fusion</exec_depend>
+    <exec_depend>vision_bridge</exec_depend>
+    <exec_depend>mission_planning</exec_depend>
+    <exec_depend>vehicle_controller</exec_depend>
+    <export>
+      <build_type>ament_python</build_type>
+    </export>
+  </package>
+
+================================================================================
+STEP 4: CREATE MAIN LAUNCH FILE
+================================================================================
+
+File: /ros2_ws/src/vehicle_bringup/launch/main.launch.py
+
+Purpose: Master launch file coordinating all systems
+
+Content should:
+1. Parse mission_file parameter
+2. Start sensor fusion (EKF)
+3. Start perception (vision + LiDAR)
+4. Start planning (mission + local nav)
+5. Start control (vehicle controller)
+6. Handle hardware_motion_enable topic
+7. Coordinate with micro-ROS agent
+
+================================================================================
+STEP 5: COMPLETE BUILD & LAUNCH SEQUENCE
+================================================================================
+
+In container (/ros2_ws):
+
+# 1. Clean
+rm -rf build install log
+
+# 2. Source ROS 2
+source /opt/ros/jazzy/setup.bash
+
+# 3. Build
+colcon build --symlink-install
+
+# 4. Source workspace
+source install/setup.bash
+
+# 5. Check packages
+ros2 pkg list | grep -E "deos|vehicle|perception|sensor|mission|control"
+
+Expected output:
+  deos_algorithms
+  mission_planning
+  perception
+  sensor_fusion
+  vehicle_bringup
+  vehicle_controller
+  vision_bridge
+
+# 6. Launch main system
+
+## Option A: Without mission file (passive waypoint mode)
+ros2 launch vehicle_bringup main.launch.py
+
+## Option B: With mission file (active navigation)
+ros2 launch vehicle_bringup main.launch.py mission_file:=/path/to/mission.geojson
+
+## Option C: With custom hardware topic
+ros2 launch vehicle_bringup main.launch.py \
+  mission_file:=/path/to/mission.geojson \
+  hardware_motion_enable_topic:=/hardware/motion_enable \
+  hardware_motion_enable_timeout_s:=0.5
+
+================================================================================
+STEP 6: VERIFY PIPELINE RUNNING
+================================================================================
+
+In new terminal (container):
+
+# Check all nodes
+ros2 node list
+
+Expected nodes:
+  /ekf_filter_node
+  /navsat_transform
+  /stereo_detector_node
+  /perception_fusion_node
+  /lidar_obstacle_node
+  /mission_planning_node
+  /vehicle_controller_node
+  /micro_ros_agent
+
+# Check all topics
+ros2 topic list
+
+Expected topics (from SETUP_ROS2_PIPELINE.md):
+  /hardware/motion_enable (STM32 command)
+  /perception/stereo_detections (JSON)
+  /perception/lidar_obstacles (JSON)
+  /perception/emergency_stop (Bool)
+  /perception/speed_cap (Float32)
+  /perception/steering_override (Float32)
+  /perception/has_steering_override (Bool)
+  /planning/steering_ref (Float32)
+  /planning/speed_limit (Float32)
+  /planning/current_task (String)
+  /planning/arrived (Bool)
+  /cmd_vel (Twist)
+  /safety/emergency_stop (Bool)
+
+# Monitor specific topics
+ros2 topic hz /cmd_vel
+ros2 topic hz /perception/emergency_stop
+ros2 topic echo /perception/speed_cap
+ros2 topic echo /planning/current_task
+
+================================================================================
+STEP 7: MICRO-ROS AGENT INTEGRATION
+================================================================================
+
+Start micro-ROS agent (in docker-compose):
+
+docker compose up -d micro_ros_agent
+
+Connect STM32:
+  - IP: Raspberry Pi ethernet IP
+  - Port: 8888
+  - Protocol: UDP
+
+Test with CLI:
+
+# Publish DUR (STOP) command from STM32
+ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: false}" -1
+
+# Check if emergency_stop triggered
+ros2 topic echo /perception/emergency_stop --once
+# Should show: data: true
+
+# Publish DEVAM (CONTINUE) command
+ros2 topic pub /hardware/motion_enable std_msgs/msg/Bool "{data: true}" -1
+
+# Check if system resumes
+ros2 topic echo /cmd_vel --once
+# Should show velocity commands if planning active
+
+================================================================================
+QUICK FIX COMMANDS (Copy-Paste)
+================================================================================
+
+Inside container:
+
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+pip install ament-package
+rm -rf build install log
+colcon build --symlink-install
+source install/setup.bash
+
+# Launch without mission
+ros2 launch vehicle_bringup main.launch.py
+
+# Or with mission file
+ros2 launch vehicle_bringup main.launch.py mission_file:=/ros2_ws/src/your_mission.geojson
+
+================================================================================
+IF STILL GETTING ERRORS
+================================================================================
+
+Error: "Cannot find main.launch.py"
+  Fix: Create /ros2_ws/src/vehicle_bringup/launch/main.launch.py
+  
+Error: "Package not found: deos_algorithms"
+  Fix: Check /ros2_ws/src/deos_algorithms/package.xml exists
+       Check colcon build completed successfully
+       source install/setup.bash
+  
+Error: "No module named 'ament_package'"
+  Fix: pip install ament-package
+       Or: apt-get install python3-ament-cmake-core
+  
+Error: "Cannot build perception (CMakeLists.txt)"
+  Fix: Add setup.cfg to /ros2_ws/src/perception/
+       Or convert perception to ament_cmake structure
+
+================================================================================
+VALIDATION CHECKLIST
+================================================================================
+
+Before running full system:
+
+□ All package.xml files exist and valid
+□ All setup.py / CMakeLists.txt files correct
+□ colcon build succeeds (all packages)
+□ ros2 pkg list shows all packages
+□ /ros2_ws/src/vehicle_bringup/launch/main.launch.py exists
+□ micro-ROS agent running (docker compose up -d micro_ros_agent)
+□ STM32 can reach Raspberry Pi on port 8888
+□ Mission GeoJSON file exists (if using mission_file parameter)
+
+System startup order:
+  1. Sensors (LiDAR, GPS, Camera) ← automatic
+  2. Sensor Fusion (EKF) → /odom ← waits for sensors
+  3. Perception (Vision + LiDAR) → /obstacles ← automatic
+  4. Mission Planning ← waits for /odom
+  5. Vehicle Controller ← waits for /cmd_vel from planner
+  6. micro-ROS Agent ← bridges to STM32
+
+Safety chain:
+  STM32 /hardware/motion_enable → perception_fusion → vehicle_controller
+  If STM32 sends false (STOP) → /perception/emergency_stop = true
+  → vehicle_controller holds /cmd_vel
+  → motors don't move until STM32 sends true (CONTINUE)
+
+================================================================================

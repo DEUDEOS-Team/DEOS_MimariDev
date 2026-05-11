@@ -1,0 +1,46 @@
+controller_server:
+  ros__parameters:
+    controller_frequency: 15.0
+    controller_plugins: ["FollowPath"]
+    FollowPath:
+      plugin: "teb_local_planner::TebLocalPlannerROS"
+      max_vel_x: 2.7777777778 #HIZ DEGERİ (10km/h) burada girilen ~2.7 m/s
+      min_turning_radius: 1.5 # Dönüş Yarıçapı
+      wheelbase: 1.6       # İki teker arası
+      footprint_model:
+        type: "polygon"
+        vertices: [[1.94, 0.62], [1.94, -0.62], [-0.36, -0.62], [-0.36, 0.62]] # Araç Boyutları
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      global_frame: odom
+      robot_base_frame: base_link
+      width: 18.0
+      height: 18.0
+      resolution: 0.05
+      footprint: "[[1.94, 0.62], [1.94, -0.62], [-0.36, -0.62], [-0.36, 0.62]]" #Araç Boyutları
+      plugins: ["obstacle_layer", "inflation_layer"]
+      
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: lidar_source camera_source
+        
+        lidar_source: # Lidar Verisi (Dubalar)
+          topic: /points_downsampled
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+          data_type: "PointCloud2"
+          
+        camera_source: # Kamera Verisi (Şeritler = Duvarlar)
+          topic: /lane_walls
+          max_obstacle_height: 3.0
+          clearing: True
+          marking: True
+          data_type: "PointCloud2"
+
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.55

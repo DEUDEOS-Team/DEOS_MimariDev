@@ -1,0 +1,20 @@
+[Unit]
+Description=DEOS health monitor (docker + ROS graph)
+After=deos-bringup.service
+Requires=deos-bringup.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/deos
+Environment=REPO_ROOT=/opt/deos
+Environment=DEOS_HEALTH_INTERVAL_S=10
+Environment=DEOS_HEALTH_FAIL_THRESHOLD=3
+ExecStart=/usr/bin/python3 /opt/deos/ops/scripts/health_monitor.py
+Restart=always
+RestartSec=2s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
