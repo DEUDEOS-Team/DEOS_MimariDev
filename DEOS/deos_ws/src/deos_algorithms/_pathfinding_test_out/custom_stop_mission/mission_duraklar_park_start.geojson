@@ -1,0 +1,87 @@
+{
+  "type": "FeatureCollection",
+  "deos_mission_meta": {
+    "coordinate_system": "pixel_map",
+    "map_png": "D:\\DEOS\\mimari\\maps\\map.png",
+    "graph_pixels_json": "D:\\DEOS\\mimari\\maps\\graph_pixels.json",
+    "vehicle_reference_xy": [
+      220,
+      295
+    ],
+    "selection_rule": "start is the reachable parking-area graph node with the shortest Dijkstra path from vehicle_reference_xy; D signs are task points"
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 0,
+        "name": "park_yeri_baslangic",
+        "task": "baslangic",
+        "node_id": 207,
+        "radius_px": 8,
+        "note": "selected parking-access start nearest to vehicle over graph"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          401,
+          204
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 1,
+        "name": "durak_orta",
+        "task": "gorev_yeri",
+        "node_id": 123,
+        "radius_px": 8,
+        "note": "pixel-map mission generated from D stop signs"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          223,
+          171
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 2,
+        "name": "durak_sol",
+        "task": "gorev_yeri",
+        "node_id": 2,
+        "radius_px": 8,
+        "note": "pixel-map mission generated from D stop signs"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          53,
+          293
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 3,
+        "name": "durak_alt",
+        "task": "gorev_yeri",
+        "node_id": 63,
+        "radius_px": 8,
+        "note": "pixel-map mission generated from D stop signs"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          128,
+          387
+        ]
+      }
+    }
+  ]
+}

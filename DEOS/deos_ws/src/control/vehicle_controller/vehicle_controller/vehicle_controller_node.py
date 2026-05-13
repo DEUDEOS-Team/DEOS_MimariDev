@@ -31,6 +31,8 @@ class VehicleControllerNode(Node):
         # Manuel/otonom ayrımı: otonom kapalıysa /cmd_vel publish etme (STM32 manual sürüşe geçebilir)
         self.declare_parameter("subscribe_autonomy_enable", True)
         self.declare_parameter("autonomy_enable_topic", "/hardware/autonomy_enable")
+        self.declare_parameter("subscribe_failsafe", True)
+        self.declare_parameter("failsafe_root", "/deos/failsafe")
         self._max_speed = float(self.get_parameter("max_speed_mps").value)
         self._max_steer = float(self.get_parameter("max_steer_rads").value)
 
@@ -55,6 +57,9 @@ class VehicleControllerNode(Node):
         self._hw_motion_stamp: float = 0.0
         self._autonomy_enable: bool = True
         self._autonomy_stamp: float = 0.0
+
+        self._failsafe_estop: bool = False
+        self._failsafe_speed_cap: float = 1.0
 
         self.create_subscription(Bool, "/perception/emergency_stop", self._estop_cb, 10)
         self.create_subscription(Float32, "/perception/speed_cap", self._speed_cap_cb, 10)
@@ -82,6 +87,14 @@ class VehicleControllerNode(Node):
             at = str(self.get_parameter("autonomy_enable_topic").value)
             self.create_subscription(Bool, at, self._autonomy_enable_cb, 10)
             self.get_logger().info(f"autonomy_enable subscription enabled on {at}")
+
+        if bool(self.get_parameter("subscribe_failsafe").value):
+            root = str(self.get_parameter("failsafe_root").value).strip().rstrip("/")
+            fet = f"{root}/out/emergency_stop"
+            fst = f"{root}/out/speed_cap"
+            self.create_subscription(Bool, fet, self._failsafe_estop_cb, 10)
+            self.create_subscription(Float32, fst, self._failsafe_speed_cap_cb, 10)
+            self.get_logger().info(f"failsafe (root={root!r}): {fet}, {fst}")
 
         self._pub_cmd = self.create_publisher(Twist, "/cmd_vel", 10)
         self._pub_estop = self.create_publisher(Bool, "/safety/emergency_stop", 10)
@@ -117,6 +130,13 @@ class VehicleControllerNode(Node):
     def _autonomy_enable_cb(self, msg: Bool) -> None:
         self._autonomy_enable = bool(msg.data)
         self._autonomy_stamp = time.monotonic()
+
+    def _failsafe_estop_cb(self, msg: Bool) -> None:
+        self._failsafe_estop = bool(msg.data)
+
+    def _failsafe_speed_cap_cb(self, msg: Float32) -> None:
+        v = float(msg.data)
+        self._failsafe_speed_cap = max(0.0, min(1.0, v))
 
     def _touch_perception(self) -> None:
         self._perception_stamp = time.monotonic()
@@ -166,7 +186,10 @@ class VehicleControllerNode(Node):
         ) else False
 
         motion_hold = bool(
-            self._emergency_stop or perception_age > self.PERCEPTION_TIMEOUT_S or hw_hold
+            self._emergency_stop
+            or self._failsafe_estop
+            or perception_age > self.PERCEPTION_TIMEOUT_S
+            or hw_hold
         )
 
         autonomy_hold = False
@@ -185,6 +208,10 @@ class VehicleControllerNode(Node):
             return
 
         if motion_hold:
+            if self._failsafe_estop:
+                pulse_n = int(self.get_parameter("safety_emergency_stop_pulse_count").value)
+                pulse_n = max(1, min(10, pulse_n))
+                self._safety_estop_pulse_remaining = max(self._safety_estop_pulse_remaining, pulse_n)
             # /safety/emergency_stop: sınırlı sayıda True pulse (estop_cb yükselen kenarda doldurulur)
             if self._safety_estop_pulse_remaining > 0:
                 self._pub_estop.publish(Bool(data=True))
@@ -218,7 +245,12 @@ class VehicleControllerNode(Node):
             base_speed = min(base_speed, self._lane_speed)
             base_steer = self._lane_steer
 
-        speed_ratio = min(self._speed_cap, base_speed)
+        fs_cap = (
+            float(self._failsafe_speed_cap)
+            if bool(self.get_parameter("subscribe_failsafe").value)
+            else 1.0
+        )
+        speed_ratio = min(self._speed_cap, fs_cap, base_speed)
         speed_ratio = max(0.0, min(1.0, speed_ratio))
 
         steer_ratio = self._steer_override if self._has_steer_override else base_steer

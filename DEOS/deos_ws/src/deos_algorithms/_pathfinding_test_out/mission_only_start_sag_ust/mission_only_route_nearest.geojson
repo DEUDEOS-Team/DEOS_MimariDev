@@ -1,0 +1,90 @@
+{
+  "type": "FeatureCollection",
+  "deos_mission_meta": {
+    "source": "D:\\DEOS\\mimari\\maps\\mission_start_sag_ust.geojson",
+    "routing_mode": "mission_only_without_graph",
+    "policy": "reorder_checkpoints_by_nearest_keep_park_last"
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "start",
+        "task": "start",
+        "ordered_index": 0,
+        "source_index": 0
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          29.509014,
+          40.790343
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "gorev_2",
+        "task": "checkpoint",
+        "ordered_index": 1,
+        "source_index": 1
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          29.508726,
+          40.789949
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "gorev_1",
+        "task": "checkpoint",
+        "ordered_index": 2,
+        "source_index": 2
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          29.50861,
+          40.789785
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "gorev_3",
+        "task": "checkpoint",
+        "ordered_index": 3,
+        "source_index": 3
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          29.509082,
+          40.789635
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "park_giris",
+        "task": "park_entry",
+        "ordered_index": 4,
+        "source_index": 4
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          29.509223,
+          40.790149
+        ]
+      }
+    }
+  ]
+}

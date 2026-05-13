@@ -1,0 +1,270 @@
+{
+  "title": "Custom path finding test: park start + D stops as task points",
+  "inputs": {
+    "map_png": "D:\\DEOS\\mimari\\maps\\map.png",
+    "graph_pixels_json": "D:\\DEOS\\mimari\\maps\\graph_pixels.json"
+  },
+  "outputs": {
+    "mission_geojson": "D:\\DEOS\\mimari\\DEOS-Mimari\\DEOS\\deos_ws\\src\\deos_algorithms\\_pathfinding_test_out\\custom_stop_mission\\mission_duraklar_park_start.geojson",
+    "overlay_png": "D:\\DEOS\\mimari\\DEOS-Mimari\\DEOS\\deos_ws\\src\\deos_algorithms\\_pathfinding_test_out\\custom_stop_mission\\overlay.png",
+    "report_json": "D:\\DEOS\\mimari\\DEOS-Mimari\\DEOS\\deos_ws\\src\\deos_algorithms\\_pathfinding_test_out\\custom_stop_mission\\report.json"
+  },
+  "vehicle_reference": {
+    "xy": [
+      220,
+      295
+    ],
+    "nearest_node_id": 161,
+    "nearest_node_xy": [
+      251,
+      299
+    ]
+  },
+  "selected_start": {
+    "name": "park_yeri_baslangic",
+    "node_id": 207,
+    "xy": [
+      401,
+      204
+    ],
+    "vehicle_to_start_cost_px": 237.97056274847716,
+    "vehicle_to_start_node_path": [
+      161,
+      164,
+      163,
+      168,
+      170,
+      176,
+      181,
+      190,
+      189,
+      196,
+      200,
+      199,
+      202,
+      205,
+      206,
+      207
+    ]
+  },
+  "detected_task_points": [
+    {
+      "name": "durak_sol",
+      "task": "gorev_yeri",
+      "x": 34,
+      "y": 275,
+      "node_id": 2,
+      "snapped_x": 53,
+      "snapped_y": 293,
+      "leg_from_prev_cost_px": 286.8111831820431,
+      "leg_from_prev_path": [
+        123,
+        118,
+        111,
+        105,
+        96,
+        94,
+        90,
+        87,
+        85,
+        81,
+        77,
+        73,
+        70,
+        71,
+        67,
+        65,
+        59,
+        52,
+        42,
+        37,
+        34,
+        32,
+        30,
+        29,
+        15,
+        8,
+        4,
+        2
+      ]
+    },
+    {
+      "name": "durak_alt",
+      "task": "gorev_yeri",
+      "x": 128,
+      "y": 404,
+      "node_id": 63,
+      "snapped_x": 128,
+      "snapped_y": 387,
+      "leg_from_prev_cost_px": 161.8700576850888,
+      "leg_from_prev_path": [
+        2,
+        4,
+        8,
+        9,
+        10,
+        6,
+        11,
+        12,
+        17,
+        20,
+        22,
+        25,
+        45,
+        56,
+        60,
+        61,
+        63
+      ]
+    },
+    {
+      "name": "durak_orta",
+      "task": "gorev_yeri",
+      "x": 239,
+      "y": 216,
+      "node_id": 123,
+      "snapped_x": 223,
+      "snapped_y": 171,
+      "leg_from_prev_cost_px": 215.97056274847716,
+      "leg_from_prev_path": [
+        207,
+        206,
+        204,
+        180,
+        175,
+        126,
+        125,
+        123
+      ]
+    }
+  ],
+  "mission_order": [
+    {
+      "name": "park_yeri_baslangic",
+      "task": "start",
+      "x": 401,
+      "y": 204,
+      "node_id": 207
+    },
+    {
+      "name": "durak_orta",
+      "task": "checkpoint",
+      "x": 223,
+      "y": 171,
+      "node_id": 123,
+      "source_marker_xy": [
+        239,
+        216
+      ]
+    },
+    {
+      "name": "durak_sol",
+      "task": "checkpoint",
+      "x": 53,
+      "y": 293,
+      "node_id": 2,
+      "source_marker_xy": [
+        34,
+        275
+      ]
+    },
+    {
+      "name": "durak_alt",
+      "task": "checkpoint",
+      "x": 128,
+      "y": 387,
+      "node_id": 63,
+      "source_marker_xy": [
+        128,
+        404
+      ]
+    }
+  ],
+  "routing": {
+    "ok": true,
+    "route_node_count": 51,
+    "route_polyline_points": 635,
+    "legs": [
+      {
+        "from": "park_yeri_baslangic",
+        "to": "durak_orta",
+        "from_node": 207,
+        "to_node": 123,
+        "node_path": [
+          207,
+          206,
+          204,
+          180,
+          175,
+          126,
+          125,
+          123
+        ],
+        "cost_px": 215.97056274847716
+      },
+      {
+        "from": "durak_orta",
+        "to": "durak_sol",
+        "from_node": 123,
+        "to_node": 2,
+        "node_path": [
+          123,
+          118,
+          111,
+          105,
+          96,
+          94,
+          90,
+          87,
+          85,
+          81,
+          77,
+          73,
+          70,
+          71,
+          67,
+          65,
+          59,
+          52,
+          42,
+          37,
+          34,
+          32,
+          30,
+          29,
+          15,
+          8,
+          4,
+          2
+        ],
+        "cost_px": 286.8111831820431
+      },
+      {
+        "from": "durak_sol",
+        "to": "durak_alt",
+        "from_node": 2,
+        "to_node": 63,
+        "node_path": [
+          2,
+          4,
+          8,
+          9,
+          10,
+          6,
+          11,
+          12,
+          17,
+          20,
+          22,
+          25,
+          45,
+          56,
+          60,
+          61,
+          63
+        ],
+        "cost_px": 161.8700576850888
+      }
+    ]
+  }
+}

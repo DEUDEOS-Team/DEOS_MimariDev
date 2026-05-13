@@ -32,6 +32,7 @@ def generate_launch_description():
     - mission_planning_node: gps+imu + mission_file -> /planning/* (Float32/Bool/String)
     - vehicle_controller_node: perception+planning -> /cmd_vel + /safety/emergency_stop
     - stm32_bridge_node: /cmd_vel -> /stm32/* (STM32 via micro-ROS)
+    - failsafe_supervisor_node: üst seviye sağlık + FSM; yayınlar /deos/failsafe/out/*, reset /deos/failsafe/in/fsm_reset (failsafe_root ile değiştirilebilir)
     """
 
     mission_file_arg = DeclareLaunchArgument(
@@ -72,6 +73,12 @@ def generate_launch_description():
         "tunnel_mandatory",
         default_value="true",
         description="Centerlines GeoJSON'da tunnel: true varsa her bacak en az bir tünel kenarından geçer (görev dosyasında alan gerekmez).",
+    )
+
+    failsafe_root_arg = DeclareLaunchArgument(
+        "failsafe_root",
+        default_value="/deos/failsafe",
+        description="Fail-safe topic kökü: out/emergency_stop, out/speed_cap, out/diagnostics; in/fsm_reset",
     )
     
     # Sensor Nodes
@@ -242,6 +249,8 @@ def generate_launch_description():
             "heading_source": "final_odom",
             "final_odom_topic": "/final_odom",
             "tunnel_mandatory": LaunchConfiguration("tunnel_mandatory"),
+            "mission_only_reorder_by_nearest": True,
+            "mission_only_keep_park_last": True,
         }],
         output="screen",
         respawn=True,
@@ -288,6 +297,24 @@ def generate_launch_description():
             "hardware_motion_enable_fail_safe_stop": True,
             "subscribe_autonomy_enable": True,
             "autonomy_enable_topic": LaunchConfiguration("autonomy_enable_topic"),
+            "subscribe_failsafe": True,
+            "failsafe_root": LaunchConfiguration("failsafe_root"),
+        }],
+        output="screen",
+        respawn=True,
+        respawn_delay=2,
+    )
+
+    failsafe_supervisor_node = Node(
+        package="deos_failsafe",
+        executable="failsafe_supervisor_node",
+        name="failsafe_supervisor_node",
+        parameters=[{
+            "failsafe_root": LaunchConfiguration("failsafe_root"),
+            "max_vehicle_speed_mps": 3.0,
+            "max_vehicle_steer_rad": 1.0,
+            "planning_max_speed_mps": 4.0,
+            "startup_grace_s": 4.0,
         }],
         output="screen",
         respawn=True,
@@ -302,6 +329,7 @@ def generate_launch_description():
         autonomy_enable_topic_arg,
         require_go_signal_arg,
         tunnel_mandatory_arg,
+        failsafe_root_arg,
         # === SENSORS (Raw Data Acquisition) ===
         camera_node,           # RGB frames: /camera/color/image_raw (30 Hz)
         gps_node,              # GPS location: /gps/fix (5-10 Hz)
@@ -324,6 +352,7 @@ def generate_launch_description():
         mission_planning_node,
 
         # === CONTROL ===
+        failsafe_supervisor_node,
         vehicle_controller_node,
         stm32_bridge_node,
         

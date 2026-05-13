@@ -15,6 +15,7 @@ from deos_algorithms.route_planner import (
     advance_mission_index_by_position,
     route_remaining_mission_via_graph,
     route_mission_plan_via_graph,
+    route_mission_plan_without_graph,
 )
 from deos_algorithms.waypoint_manager import GpsPosition
 
@@ -57,6 +58,8 @@ class MissionPlanningNode(Node):
         self.declare_parameter("centerlines_round_decimals", 7)
         # Centerlines'ta tunnel: true varsa rota en az bir tünel kenarından geçer (görev GeoJSON gerekmez).
         self.declare_parameter("tunnel_mandatory", True)
+        self.declare_parameter("mission_only_reorder_by_nearest", True)
+        self.declare_parameter("mission_only_keep_park_last", True)
         # UMS-2 Go: araç göreve başlamadan önce onay bekle
         self.declare_parameter("require_go_signal", True)
         self.declare_parameter("go_topic", "/hardware/motion_enable")
@@ -69,6 +72,8 @@ class MissionPlanningNode(Node):
         centerlines_file = str(self.get_parameter("centerlines_file").value)
         centerlines_round = int(self.get_parameter("centerlines_round_decimals").value)
         self._tunnel_mandatory = _param_as_bool(self.get_parameter("tunnel_mandatory").value)
+        self._mission_only_reorder = _param_as_bool(self.get_parameter("mission_only_reorder_by_nearest").value)
+        self._mission_only_keep_park_last = _param_as_bool(self.get_parameter("mission_only_keep_park_last").value)
         self._heading_offset = float(self.get_parameter("heading_offset_deg").value)
         self._require_go = _param_as_bool(self.get_parameter("require_go_signal").value)
         self._go_ok: bool = False
@@ -118,6 +123,15 @@ class MissionPlanningNode(Node):
                 except Exception as e:
                     self.get_logger().error(f"Routing başarısız, mission plan kullanılacak — {e}")
                     plan = self._base_plan
+            else:
+                plan = route_mission_plan_without_graph(
+                    self._base_plan,
+                    reorder_checkpoints_by_nearest=self._mission_only_reorder,
+                    keep_park_last=self._mission_only_keep_park_last,
+                )
+                self.get_logger().info(
+                    f"Mission-only routing aktif: {len(self._base_plan)} hedef -> {len(plan)} waypoint"
+                )
             self._manager = MissionManager(plan)
             self.get_logger().info(f"Görev yüklendi: {len(plan)} waypoint — {mission_file}")
 

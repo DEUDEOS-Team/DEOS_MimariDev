@@ -23,6 +23,68 @@ from deos_algorithms.route_graph import (
 )
 
 
+def route_mission_plan_without_graph(
+    plan: MissionPlan,
+    *,
+    reorder_checkpoints_by_nearest: bool = True,
+    keep_park_last: bool = True,
+) -> MissionPlan:
+    """
+    Centerline graph olmadan mission GeoJSON noktalarindan takip edilebilir waypoint sirasi uretir.
+
+    Bu mod yol topolojisi bilmez; Dijkstra yerine mission noktalarini dogrudan kullanir.
+    Varsayilan politika START'i basa alir, gorev noktalarini yakinlik sirasi ile dizer,
+    PARK_ENTRY/PARK noktalarini sona alir.
+    """
+    if not plan.points:
+        return plan
+
+    pts = list(plan.points)
+    original_start = next((p for p in pts if p.task == TaskType.START), None)
+    if original_start is None:
+        original_start = pts[0]
+        start = replace(original_start, task=TaskType.START, name=original_start.name or "start")
+    else:
+        start = original_start
+
+    park_tasks = {TaskType.PARK_ENTRY, TaskType.PARK}
+    middle: list[MissionPoint] = []
+    park_points: list[MissionPoint] = []
+    for p in pts:
+        if p is original_start:
+            continue
+        if p.task in park_tasks and keep_park_last:
+            park_points.append(p)
+        else:
+            middle.append(p)
+
+    ordered_middle = list(middle)
+    if reorder_checkpoints_by_nearest and len(middle) > 1:
+        ordered_middle = []
+        remaining = list(middle)
+        cur = start
+        while remaining:
+            best_i = min(
+                range(len(remaining)),
+                key=lambda i: haversine_m(
+                    float(cur.lat),
+                    float(cur.lon),
+                    float(remaining[i].lat),
+                    float(remaining[i].lon),
+                ),
+            )
+            cur = remaining.pop(best_i)
+            ordered_middle.append(cur)
+
+    ordered = [start] + ordered_middle + park_points
+    return MissionPlan(
+        points=[replace(p, index=i) for i, p in enumerate(ordered)],
+        source_file=plan.source_file,
+        raw_crs=plan.raw_crs,
+        meta=dict(plan.meta),
+    )
+
+
 def _tunnel_multiplier_from_plan(plan: MissionPlan) -> Callable[[Edge], float] | None:
     """`prefer_tunnel` açıksa `tunnel: true` centerline kenarlarını ucuzlatır (Dijkstra tünelden geçmeyi tercih eder)."""
     if not plan.prefer_tunnel_routing:

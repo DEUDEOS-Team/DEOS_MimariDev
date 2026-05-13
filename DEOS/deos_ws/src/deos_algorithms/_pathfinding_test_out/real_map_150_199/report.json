@@ -1,0 +1,184 @@
+{
+  "title": "E2E Full Stack Visual Test (ROS'suz)",
+  "inputs": {
+    "map_png": "D:\\DEOS\\mimari\\maps\\real_map.jpeg",
+    "graph_pixels_json": "D:\\DEOS\\mimari\\maps\\_real_map_out_150_199\\graph.json"
+  },
+  "graph_stats": {
+    "n_nodes": 5036,
+    "n_edges": 17086
+  },
+  "mission_pixels": [
+    {
+      "name": "start",
+      "task": "start",
+      "x": 97,
+      "y": 118,
+      "node_id": 534
+    },
+    {
+      "name": "gorev_1",
+      "task": "checkpoint",
+      "x": 139,
+      "y": 356,
+      "node_id": 888
+    },
+    {
+      "name": "park_giris",
+      "task": "park_entry",
+      "x": 643,
+      "y": 166,
+      "node_id": 4896
+    }
+  ],
+  "routing": {
+    "ok": false,
+    "legs": [
+      {
+        "from": 534,
+        "to": 888,
+        "node_path": [
+          534,
+          700,
+          701,
+          702,
+          688,
+          676,
+          667,
+          661,
+          657,
+          654,
+          651,
+          646,
+          641,
+          634,
+          624,
+          616,
+          609,
+          603,
+          595,
+          587,
+          579,
+          571,
+          562,
+          552,
+          543,
+          536,
+          528,
+          518,
+          505,
+          492,
+          482,
+          469,
+          456,
+          444,
+          426,
+          357,
+          358,
+          346,
+          335,
+          321,
+          303,
+          287,
+          271,
+          252,
+          237,
+          226,
+          216,
+          206,
+          253,
+          272,
+          359,
+          377,
+          565,
+          566,
+          679,
+          693,
+          842,
+          853,
+          877,
+          888
+        ]
+      },
+      {
+        "from": 888,
+        "to": 4896,
+        "node_path": []
+      }
+    ],
+    "route_node_count": 60,
+    "route_polyline_points": 0
+  },
+  "outputs": {
+    "overlay_png": "_pathfinding_test_out\\real_map_150_199\\overlay.png"
+  },
+  "architecture": {
+    "localization": {
+      "summary": "pcl_localization_ros2, LiDAR map matching (NDT/GICP) ile map→odom TF/pose üretir.",
+      "inputs": [
+        "/scan_fullframe veya /cloud_unstructured",
+        "/imu/data (opsiyonel)",
+        "map (PCD/pointcloud)"
+      ],
+      "outputs": [
+        "TF map→odom",
+        "pose/odometry topic (pakete göre)"
+      ],
+      "notes": [
+        "Lokalizasyon haritası (pointcloud) yol graph değildir; 'neredeyim?' için kullanılır.",
+        "Rota graph'ı ayrı bir topoloji verisidir (lane centerlines)."
+      ]
+    },
+    "global_planning": {
+      "summary": "mission_planning_node: mission_file (GeoJSON) + (opsiyonel) centerlines_file -> route (Dijkstra) -> WaypointManager/MissionManager.",
+      "inputs": [
+        "/gps/fix",
+        "/imu/data",
+        "mission_file",
+        "centerlines_file (opsiyonel)",
+        "/perception/turn_permissions",
+        "/perception/park_complete"
+      ],
+      "outputs": [
+        "/planning/steering_ref",
+        "/planning/speed_limit",
+        "/planning/current_task",
+        "/planning/arrived",
+        "/planning/park_mode",
+        "/planning/park_remaining_s"
+      ]
+    },
+    "local_planning": {
+      "summary": "perception_fusion_node: stereo/lidar/lane_walls -> logic modülleri -> DecisionArbiter ile tek karar.",
+      "inputs": [
+        "/perception/stereo_detections",
+        "/perception/lidar_obstacles",
+        "/lane_walls",
+        "/planning/park_mode"
+      ],
+      "outputs": [
+        "/perception/emergency_stop",
+        "/perception/speed_cap",
+        "/perception/steering_override",
+        "/perception/decision_debug",
+        "/perception/park_complete",
+        "/perception/turn_permissions"
+      ],
+      "notes": [
+        "Şerit dışına çıkmama: lane_walls'tan LaneBounds çıkarılıp static_avoid steer clamp edilir ya da lane yoksa avoidance kapatılır."
+      ]
+    },
+    "control": {
+      "summary": "vehicle_controller_node: planning referansı + perception override/estop + motion_enable -> /cmd_vel.",
+      "inputs": [
+        "/planning/*",
+        "/perception/*",
+        "/hardware/motion_enable (opsiyonel)"
+      ],
+      "outputs": [
+        "/cmd_vel",
+        "/safety/emergency_stop"
+      ]
+    }
+  }
+}

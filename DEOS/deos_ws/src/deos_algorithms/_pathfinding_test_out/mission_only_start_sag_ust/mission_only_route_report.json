@@ -1,0 +1,231 @@
+{
+  "title": "Mission-only route test without lane_centerlines",
+  "input_mission_geojson": "D:\\DEOS\\mimari\\maps\\mission_start_sag_ust.geojson",
+  "algorithm": {
+    "mode": "mission_only_without_graph",
+    "centerlines_file_used": false,
+    "description": "Mission GeoJSON noktalar? do?rudan waypoint olarak kullan?l?r; START ba?a al?n?r, g?rev noktalar? iste?e g?re yak?nl?k s?ras?na dizilir, park_giris sona b?rak?l?r."
+  },
+  "parsed_input_order": {
+    "points": [
+      {
+        "index": 0,
+        "name": "start",
+        "task": "start",
+        "lon": 29.509014,
+        "lat": 40.790343,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      },
+      {
+        "index": 1,
+        "name": "gorev_1",
+        "task": "checkpoint",
+        "lon": 29.50861,
+        "lat": 40.789785,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      },
+      {
+        "index": 2,
+        "name": "gorev_2",
+        "task": "checkpoint",
+        "lon": 29.508726,
+        "lat": 40.789949,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      },
+      {
+        "index": 3,
+        "name": "gorev_3",
+        "task": "checkpoint",
+        "lon": 29.509082,
+        "lat": 40.789635,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      },
+      {
+        "index": 4,
+        "name": "park_giris",
+        "task": "park_entry",
+        "lon": 29.509223,
+        "lat": 40.790149,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      }
+    ],
+    "legs": [
+      {
+        "from": "start",
+        "to": "gorev_1",
+        "distance_m": 70.757
+      },
+      {
+        "from": "gorev_1",
+        "to": "gorev_2",
+        "distance_m": 20.686
+      },
+      {
+        "from": "gorev_2",
+        "to": "gorev_3",
+        "distance_m": 46.014
+      },
+      {
+        "from": "gorev_3",
+        "to": "park_giris",
+        "distance_m": 58.374
+      }
+    ],
+    "total_direct_distance_m": 195.831
+  },
+  "nearest_order_keep_park_last": {
+    "points": [
+      {
+        "index": 0,
+        "name": "start",
+        "task": "start",
+        "lon": 29.509014,
+        "lat": 40.790343,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      },
+      {
+        "index": 1,
+        "name": "gorev_2",
+        "task": "checkpoint",
+        "lon": 29.508726,
+        "lat": 40.789949,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      },
+      {
+        "index": 2,
+        "name": "gorev_1",
+        "task": "checkpoint",
+        "lon": 29.50861,
+        "lat": 40.789785,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      },
+      {
+        "index": 3,
+        "name": "gorev_3",
+        "task": "checkpoint",
+        "lon": 29.509082,
+        "lat": 40.789635,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      },
+      {
+        "index": 4,
+        "name": "park_giris",
+        "task": "park_entry",
+        "lon": 29.509223,
+        "lat": 40.790149,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      }
+    ],
+    "legs": [
+      {
+        "from": "start",
+        "to": "gorev_2",
+        "distance_m": 50.072
+      },
+      {
+        "from": "gorev_2",
+        "to": "gorev_1",
+        "distance_m": 20.686
+      },
+      {
+        "from": "gorev_1",
+        "to": "gorev_3",
+        "distance_m": 43.095
+      },
+      {
+        "from": "gorev_3",
+        "to": "park_giris",
+        "distance_m": 58.374
+      }
+    ],
+    "total_direct_distance_m": 172.227
+  },
+  "file_order_keep_park_last": {
+    "points": [
+      {
+        "index": 0,
+        "name": "start",
+        "task": "start",
+        "lon": 29.509014,
+        "lat": 40.790343,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      },
+      {
+        "index": 1,
+        "name": "gorev_1",
+        "task": "checkpoint",
+        "lon": 29.50861,
+        "lat": 40.789785,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      },
+      {
+        "index": 2,
+        "name": "gorev_2",
+        "task": "checkpoint",
+        "lon": 29.508726,
+        "lat": 40.789949,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      },
+      {
+        "index": 3,
+        "name": "gorev_3",
+        "task": "checkpoint",
+        "lon": 29.509082,
+        "lat": 40.789635,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      },
+      {
+        "index": 4,
+        "name": "park_giris",
+        "task": "park_entry",
+        "lon": 29.509223,
+        "lat": 40.790149,
+        "arrival_radius_m": 1.0,
+        "speed_limit_ratio": 1.0
+      }
+    ],
+    "legs": [
+      {
+        "from": "start",
+        "to": "gorev_1",
+        "distance_m": 70.757
+      },
+      {
+        "from": "gorev_1",
+        "to": "gorev_2",
+        "distance_m": 20.686
+      },
+      {
+        "from": "gorev_2",
+        "to": "gorev_3",
+        "distance_m": 46.014
+      },
+      {
+        "from": "gorev_3",
+        "to": "park_giris",
+        "distance_m": 58.374
+      }
+    ],
+    "total_direct_distance_m": 195.831
+  },
+  "checks": {
+    "nearest_starts_with_start": true,
+    "nearest_ends_with_park": true,
+    "file_order_starts_with_start": true,
+    "file_order_ends_with_park": true
+  }
+}
