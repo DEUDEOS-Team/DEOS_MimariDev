@@ -21,6 +21,24 @@ from deos_algorithms.decision_arbiter import Candidate, DecisionArbiter, LaneBou
 from deos_algorithms.obstacle_logic import ObstacleDetection, ObstacleLogic
 
 
+def _print_output_key_legend() -> None:
+    """
+    Çıktı alanları (expected/actual) neyi doğrular?
+    - emergency_stop: Bu scriptte "dur/bekle" hız kısıtı ile doğrulanır (emergency_stop değil).
+    - speed_cap: 0.0 => dur/bekle. (Pedestrian görüldüğünde her koşulda 0 beklenir.)
+    - has_steer_override: Lane varsa (taze/valid) dinamik kaçınma yönü aktif olur.
+    - steer_override: Kaçınma yönü için normalize steer [-1..1] (lane yoksa 0 beklenir).
+    - reasons: dynamic_avoid gibi karar gerekçesi.
+    """
+
+    print("\n-- ÇIKTI ALANLARI SÖZLÜĞÜ --")
+    print(" emergency_stop     : Bu testte beklenen False (durma speed_cap ile)")
+    print(" speed_cap          : 0.0 => dur/bekle (yaya davranışı)")
+    print(" has_steer_override : Lane varsa True, lane yoksa False")
+    print(" steer_override     : Lane varsa !=0, lane yoksa 0.0")
+    print(" reasons            : dynamic_avoid vb. gerekçeler")
+
+
 def _contains_reason(code: ReasonCode):
     def _pred(rs):
         return any(str(r) == code.value for r in rs)
@@ -28,7 +46,7 @@ def _contains_reason(code: ReasonCode):
     return _pred
 
 
-def _case(*, name: str, expected: dict, actual: dict) -> bool:
+def _case(*, name: str, expected: dict, actual: dict, actions_if_pass: list[str] | None = None) -> bool:
     ok = True
     for k, v in expected.items():
         if callable(v):
@@ -40,6 +58,10 @@ def _case(*, name: str, expected: dict, actual: dict) -> bool:
     print(f"\n[{status}] {name}")
     print(f"  beklenen : {json.dumps(exp_print, ensure_ascii=False)}")
     print(f"  çıkan    : {json.dumps(actual, ensure_ascii=False)}")
+    if ok and actions_if_pass:
+        print("  eylemler :")
+        for a in actions_if_pass:
+            print(f"   - {a}")
     return ok
 
 
@@ -95,6 +117,7 @@ def _run(ped_lat_m: float, lane: LaneBounds | None) -> dict:
 
 def main() -> int:
     print("== E2E: dynamic pedestrian lane gate ==")
+    _print_output_key_legend()
 
     total = 0
     passed = 0

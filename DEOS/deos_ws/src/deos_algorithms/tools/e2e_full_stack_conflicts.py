@@ -61,7 +61,34 @@ def _normalize(obj: Any) -> Any:
     return obj
 
 
-def _case(*, name: str, desc: str, expected: dict[str, Any], actual: dict[str, Any]) -> bool:
+def _print_output_key_legend() -> None:
+    """
+    Çıktı alanları (expected/actual) neyi doğrular?
+    - emergency_stop: True => araç mutlak durmalı (arbiter hard-stop).
+    - speed_cap: [0..1] hız üst limiti oranı. Adaylar arasında minimum alınır.
+    - has_steer_override: True => perception kaynaklı steer override uygulanıyor.
+    - steer_override: [-1..1] normalize steer (lane clamp/disable uygulayabilir).
+    - reasons: Kararın gerekçe kodları (ReasonCode listesi).
+    - controller./cmd_vel: Testte plan+perception karışımından üretilen kontrol çıktısı.
+    """
+
+    print("\n-- ÇIKTI ALANLARI SÖZLÜĞÜ --")
+    print(" decision.emergency_stop     : Acil dur kararı (hız 0)")
+    print(" decision.speed_cap          : Hız üst limiti oranı [0..1] (min kuralı)")
+    print(" decision.has_steer_override : Steer override aktif mi")
+    print(" decision.steer_override     : Normalize steer [-1..1] (lane clamp/disable olabilir)")
+    print(" decision.reasons            : Karar gerekçeleri (ReasonCode)")
+    print(" controller./cmd_vel         : Nihai /cmd_vel örnek çıktısı (simülasyon)")
+
+
+def _case(
+    *,
+    name: str,
+    desc: str,
+    expected: dict[str, Any],
+    actual: dict[str, Any],
+    actions_if_pass: list[str] | None = None,
+) -> bool:
     ok = True
     mism: dict[str, tuple[Any, Any]] = {}
     for k, ev in expected.items():
@@ -87,6 +114,10 @@ def _case(*, name: str, desc: str, expected: dict[str, Any], actual: dict[str, A
         json.dumps({k: ("<koşul>" if callable(v) else v) for k, v in expected.items()}, ensure_ascii=False, default=str),
     )
     print("  çıkan    :", json.dumps(_normalize(actual), ensure_ascii=False, default=str))
+    if ok and actions_if_pass:
+        print("  eylemler :")
+        for a in actions_if_pass:
+            print(f"   - {a}")
     if mism:
         print("  farklar  :")
         for k, (ev, av) in mism.items():
@@ -195,6 +226,7 @@ def _run_step(
 def main() -> int:
     _ensure_utf8_stdio()
     print("== E2E: Full-stack conflict scenarios (Light + Obstacle) ==")
+    _print_output_key_legend()
 
     total = 0
     passed = 0

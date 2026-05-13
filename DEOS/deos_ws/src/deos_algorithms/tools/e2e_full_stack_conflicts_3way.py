@@ -52,7 +52,32 @@ def _normalize(obj: Any) -> Any:
     return obj
 
 
-def _case(*, name: str, desc: str, expected: dict[str, Any], actual: dict[str, Any]) -> bool:
+def _print_output_key_legend() -> None:
+    """
+    Çıktı alanları (expected/actual) neyi doğrular?
+    - emergency_stop: True => araç mutlak durmalı (arbiter hard-stop).
+    - speed_cap: [0..1] hız üst limiti oranı. Adaylar arasında minimum alınır.
+    - has_steer_override: True => perception kaynaklı steer override uygulanıyor.
+    - steer_override: [-1..1] normalize steer (lane clamp/disable uygulayabilir).
+    - reasons: Kararın gerekçe kodları (ReasonCode listesi).
+    """
+
+    print("\n-- ÇIKTI ALANLARI SÖZLÜĞÜ --")
+    print(" emergency_stop     : Acil dur kararı (hız 0)")
+    print(" speed_cap          : Hız üst limiti oranı [0..1] (min kuralı)")
+    print(" has_steer_override : Steer override aktif mi")
+    print(" steer_override     : Normalize steer [-1..1] (lane clamp/disable olabilir)")
+    print(" reasons            : Karar gerekçeleri (ReasonCode)")
+
+
+def _case(
+    *,
+    name: str,
+    desc: str,
+    expected: dict[str, Any],
+    actual: dict[str, Any],
+    actions_if_pass: list[str] | None = None,
+) -> bool:
     ok = True
     mism: dict[str, tuple[Any, Any]] = {}
     for k, ev in expected.items():
@@ -75,6 +100,10 @@ def _case(*, name: str, desc: str, expected: dict[str, Any], actual: dict[str, A
     print(f"  senaryo  : {desc}")
     print("  beklenen :", json.dumps({k: ("<koşul>" if callable(v) else v) for k, v in expected.items()}, ensure_ascii=False))
     print("  çıkan    :", json.dumps(_normalize(actual), ensure_ascii=False))
+    if ok and actions_if_pass:
+        print("  eylemler :")
+        for a in actions_if_pass:
+            print(f"   - {a}")
     if mism:
         print("  farklar  :")
         for k, (ev, av) in mism.items():
@@ -152,6 +181,7 @@ def _arbitrate(
 def main() -> int:
     _ensure_utf8_stdio()
     print("== E2E: 3-way conflict scenarios (Light + Obstacle + Sign) ==")
+    _print_output_key_legend()
 
     total = 0
     passed = 0
