@@ -8,34 +8,34 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image, Imu, PointCloud2
 from std_msgs.msg import Bool, Float32, String
 
+from deos_algorithms.ros_topic_layout import build_deos_topics
 from deos_failsafe.control_evaluator import evaluate_control, twist_to_command_dict
 from deos_failsafe.decision_engine_core import FailSafeDecisionCore
 from deos_failsafe.planning_validator import PlanningValidator
-from deos_failsafe.safety_types import FailSafeCommand, Health, PlanStatus
+from deos_failsafe.safety_types import ControlStatus, FailSafeCommand, Health, PlanStatus
 
 
 class FailsafeSupervisorNode(Node):
     """
     ROS 2 supervisor: sensör / algı / plan / kontrol sağlığı -> FailSafeDecisionCore.
 
-    Topic hiyerarşisi (failsafe_root varsayılan /deos/failsafe):
-      {root}/out/emergency_stop  (std_msgs/Bool)
-      {root}/out/speed_cap       (std_msgs/Float32, 0..1)
-      {root}/out/diagnostics    (std_msgs/String, JSON)
-      {root}/in/fsm_reset       (std_msgs/Bool, true = acil durum kilidini kaldır)
+    Topic hiyerarşisi ``build_deos_topics(deos_root)`` ile uyumludur; yayınlar:
+      {deos_root}/failsafe/out/emergency_stop, out/speed_cap, out/diagnostics;
+      abonelik: {deos_root}/failsafe/in/fsm_reset
     """
 
     def __init__(self) -> None:
         super().__init__("failsafe_supervisor_node")
 
-        self.declare_parameter("failsafe_root", "/deos/failsafe")
-        self.declare_parameter("camera_topic", "/camera/color/image_raw")
-        self.declare_parameter("lidar_topic", "/cloud_unstructured_fullframe")
-        self.declare_parameter("imu_topic", "/imu/data")
-        self.declare_parameter("perception_stereo_topic", "/perception/stereo_detections")
-        self.declare_parameter("planning_speed_topic", "/planning/speed_limit")
-        self.declare_parameter("planning_steer_topic", "/planning/steering_ref")
-        self.declare_parameter("cmd_vel_topic", "/cmd_vel")
+        self.declare_parameter("deos_root", "/deos")
+        _T = build_deos_topics(str(self.get_parameter("deos_root").value))
+        self.declare_parameter("camera_topic", _T["sensors_camera_color"])
+        self.declare_parameter("lidar_topic", _T["sensors_lidar_cloud_unstructured_fullframe"])
+        self.declare_parameter("imu_topic", _T["sensors_imu"])
+        self.declare_parameter("perception_stereo_topic", _T["perception_stereo_detections"])
+        self.declare_parameter("planning_speed_topic", _T["planning_speed_limit"])
+        self.declare_parameter("planning_steer_topic", _T["planning_steering_ref"])
+        self.declare_parameter("cmd_vel_topic", _T["control_cmd_vel"])
         self.declare_parameter("sensor_timeout_s", 0.5)
         self.declare_parameter("perception_timeout_s", 0.6)
         self.declare_parameter("planning_timeout_s", 0.5)
@@ -76,11 +76,10 @@ class FailsafeSupervisorNode(Node):
         self._plan_speed_val: float = 0.0
         self._plan_steer_val: float = 0.0
 
-        root = str(self.get_parameter("failsafe_root").value).strip().rstrip("/")
-        t_out_estop = f"{root}/out/emergency_stop"
-        t_out_cap = f"{root}/out/speed_cap"
-        t_out_diag = f"{root}/out/diagnostics"
-        t_in_reset = f"{root}/in/fsm_reset"
+        t_out_estop = _T["failsafe_out_emergency_stop"]
+        t_out_cap = _T["failsafe_out_speed_cap"]
+        t_out_diag = _T["failsafe_out_diagnostics"]
+        t_in_reset = _T["failsafe_in_fsm_reset"]
 
         self.create_subscription(
             Image, str(self.get_parameter("camera_topic").value), self._on_cam, 10
@@ -118,7 +117,7 @@ class FailsafeSupervisorNode(Node):
 
         self.create_timer(0.05, self._tick)
         self.get_logger().info(
-            f"failsafe_supervisor_node ready — root={root!r} "
+            f"failsafe_supervisor_node ready — deos_root={str(self.get_parameter('deos_root').value)!r} "
             f"publishes {t_out_estop}, {t_out_cap}, {t_out_diag}; subscribes {t_in_reset}"
         )
 
@@ -184,21 +183,30 @@ class FailsafeSupervisorNode(Node):
                 return True
             return (now - last) > timeout
 
+        lost_count = 0
         if stale(self._cam_t):
-            status = "CRITICAL"
             confidence -= 0.3
-            reasons.append("Kamera Verisi Yok / Timeout")
+            reasons.append("Kamera Timeout")
+            lost_count += 1
         if stale(self._lidar_t):
-            status = "CRITICAL"
             confidence -= 0.3
-            reasons.append("Lidar Verisi Yok / Timeout")
+            reasons.append("Lidar Timeout")
+            lost_count += 1
         if stale(self._imu_t):
-            status = "CRITICAL"
             confidence -= 0.3
-            reasons.append("IMU Verisi Yok / Timeout")
+            reasons.append("IMU Timeout")
+            lost_count += 1
+
+        # Tek sensör kaybı → WARNING (yavaşla, devam et)
+        # İki veya daha fazla sensör kaybı → CRITICAL (emergency stop)
+        # Böylece kısa USB dropout'ları tüm görevi sonlandırmaz.
+        if lost_count >= 2:
+            status = "CRITICAL"
+        elif lost_count == 1:
+            status = "WARNING"
 
         confidence = max(0.0, min(1.0, confidence))
-        is_healthy = status != "CRITICAL"
+        is_healthy = status not in ("CRITICAL",)
         return Health(
             module_name="sensors",
             overall_score=confidence,

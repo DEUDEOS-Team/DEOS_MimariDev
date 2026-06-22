@@ -148,7 +148,8 @@ def _arbitrate(
     if light_state.must_stop:
         cands.append(Candidate(name="light", emergency_stop=True, speed_cap=0.0, reasons=[ReasonCode.LIGHT_MUST_STOP]))
     elif float(light_state.speed_cap_ratio) < 1.0:
-        cands.append(Candidate(name="light", emergency_stop=False, speed_cap=float(light_state.speed_cap_ratio), reasons=[ReasonCode.LIGHT_YELLOW_SLOW]))
+        lr = ReasonCode.LIGHT_RED_SLOW if light_state.active_color == LightColor.RED else ReasonCode.LIGHT_YELLOW_SLOW
+        cands.append(Candidate(name="light", emergency_stop=False, speed_cap=float(light_state.speed_cap_ratio), reasons=[lr]))
 
     if sign_state.must_stop_soon:
         cands.append(Candidate(name="sign", emergency_stop=True, speed_cap=0.0, reasons=[ReasonCode.SIGN_MUST_STOP]))
@@ -194,8 +195,8 @@ def main() -> int:
     # 1) RED + STOP sign + static avoid => emergency stop (red dominates, but reasons include multiple)
     out = _arbitrate(
         lane=lane_ok,
-        light_dets=[LightDetection(color=LightColor.RED, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=12.0)] * 2,
-        sign_dets=[SignDetection(class_name=SignClass.STOP, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=6.0)] * 3,
+        light_dets=[LightDetection(color=LightColor.RED, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=2.5)] * 2,
+        sign_dets=[SignDetection(class_name=SignClass.STOP, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=3.0)] * 3,
         obs_dets=static_barrier,
         now=time.monotonic(),
     )
@@ -256,7 +257,7 @@ def main() -> int:
     # Here both pass MIN_CONFIDENCE=0.5; near should dominate (distance-based).
     out = _arbitrate(
         lane=lane_ok,
-        light_dets=[LightDetection(color=LightColor.RED, confidence=0.55, bbox_px=(0, 0, 1, 1), estimated_distance_m=6.0)] * 2
+        light_dets=[LightDetection(color=LightColor.RED, confidence=0.55, bbox_px=(0, 0, 1, 1), estimated_distance_m=2.5)] * 2
         + [LightDetection(color=LightColor.GREEN, confidence=0.95, bbox_px=(0, 0, 1, 1), estimated_distance_m=25.0)] * 2,
         sign_dets=[],
         obs_dets=[],
@@ -265,7 +266,7 @@ def main() -> int:
     total += 1
     passed += _case(
         name="Işık seçiminde yakınlık > doğruluk (ikisi de eşik üstü)",
-        desc="Yakın kırmızı (conf düşük ama eşik üstü) varken uzak yeşil olsa bile kırmızı baskın olmalı.",
+        desc="Yakın kırmızı (<=3 m, conf eşik üstü) varken uzak yeşil olsa bile kırmızı baskın olmalı.",
         expected={
             "emergency_stop": True,
             "speed_cap": 0.0,

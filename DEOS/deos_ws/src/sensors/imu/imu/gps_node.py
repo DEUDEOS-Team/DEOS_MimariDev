@@ -5,6 +5,8 @@ import serial
 import pynmea2
 from datetime import datetime
 
+from deos_algorithms.ros_topic_layout import build_deos_topics
+
 
 class GPSNode(Node):
     def __init__(self):
@@ -14,7 +16,10 @@ class GPSNode(Node):
         self.declare_parameter('port', '/dev/ttyUSB0')
         self.declare_parameter('baudrate', 9600)
         self.declare_parameter('frame_id', 'gps_link')
-        
+        self.declare_parameter('deos_root', '/deos')
+        _T = build_deos_topics(str(self.get_parameter('deos_root').value))
+        self.declare_parameter('gps_fix_topic', _T['sensors_gps_fix'])
+
         port = self.get_parameter('port').value
         baudrate = self.get_parameter('baudrate').value
         self.frame_id = self.get_parameter('frame_id').value
@@ -29,7 +34,7 @@ class GPSNode(Node):
             return
         
         # Publisher
-        self.publisher_ = self.create_publisher(NavSatFix, '/gps/fix', 10)
+        self.publisher_ = self.create_publisher(NavSatFix, str(self.get_parameter('gps_fix_topic').value), 10)
         
         # Timer for read loop
         self.timer = self.create_timer(0.1, self.timer_callback)
@@ -68,15 +73,17 @@ class GPSNode(Node):
                 return
             
             # Extract latitude and longitude
-            if hasattr(msg, 'lat') and hasattr(msg, 'lon') and msg.lat and msg.lon:
-                lat = float(msg.lat)
-                lon = float(msg.lon)
-                
+            # pynmea2 .latitude/.longitude zaten decimal degree olarak verir.
+            # .lat/.lon ise DDMM.MMMM ham NMEA formatıdır — doğrudan float() KULLANILMAZ.
+            if hasattr(msg, 'latitude') and hasattr(msg, 'longitude') and msg.latitude and msg.longitude:
+                lat = float(msg.latitude)
+                lon = float(msg.longitude)
+
                 # Altitude (if available)
                 alt = 0.0
                 if hasattr(msg, 'altitude') and msg.altitude:
                     alt = float(msg.altitude)
-                
+
                 # Create NavSatFix message
                 nav_msg = NavSatFix()
                 nav_msg.header.stamp = self.get_clock().now().to_msg()
@@ -84,7 +91,7 @@ class GPSNode(Node):
                 nav_msg.latitude = lat
                 nav_msg.longitude = lon
                 nav_msg.altitude = alt
-                nav_msg.status.status = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
+                nav_msg.status.status = 0  # STATUS_FIX
                 nav_msg.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
                 
                 self.publisher_.publish(nav_msg)

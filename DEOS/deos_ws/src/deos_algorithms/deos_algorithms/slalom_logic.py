@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 from deos_algorithms.obstacle_logic import ObstacleDetection, ObstacleKind
-from deos_algorithms.safety_logic import IMAGE_HEIGHT_PX, IMAGE_WIDTH_PX
 
 
 MIN_CONFIDENCE = 0.4
@@ -56,7 +55,7 @@ class SlalomState:
 
 
 class SlalomLogic:
-    def __init__(self, goruntu_genislik: int = IMAGE_WIDTH_PX, goruntu_yukseklik: int = IMAGE_HEIGHT_PX):
+    def __init__(self, goruntu_genislik: int = 640, goruntu_yukseklik: int = 480):
         self._g_w = goruntu_genislik
         self._g_h = goruntu_yukseklik
 

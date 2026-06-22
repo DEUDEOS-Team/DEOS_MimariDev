@@ -5,16 +5,20 @@ from cv_bridge import CvBridge
 import pyrealsense2 as rs
 import numpy as np
 
+from deos_algorithms.ros_topic_layout import build_deos_topics
+
 
 class RealSenseD415Node(Node):
     def __init__(self):
         super().__init__('realsense_d415_node')
         
         # Parameters
-        self.declare_parameter('rgb_topic', '/camera/color/image_raw')
-        self.declare_parameter('depth_topic', '/camera/depth/image_raw')
-        self.declare_parameter('color_info_topic', '/camera/color/camera_info')
-        self.declare_parameter('depth_info_topic', '/camera/depth/camera_info')
+        self.declare_parameter('deos_root', '/deos')
+        _T = build_deos_topics(str(self.get_parameter('deos_root').value))
+        self.declare_parameter('rgb_topic', _T['sensors_camera_color'])
+        self.declare_parameter('depth_topic', _T['sensors_camera_depth'])
+        self.declare_parameter('color_info_topic', _T['sensors_camera_color_info'])
+        self.declare_parameter('depth_info_topic', _T['sensors_camera_depth_info'])
         self.declare_parameter('frame_width', 640)
         self.declare_parameter('frame_height', 480)
         self.declare_parameter('fps', 30)

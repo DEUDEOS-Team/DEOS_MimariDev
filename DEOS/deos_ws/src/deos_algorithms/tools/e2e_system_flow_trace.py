@@ -93,7 +93,8 @@ def _candidates_from_states(
     if light_state.must_stop:
         cands.append(Candidate(name="light", emergency_stop=True, speed_cap=0.0, reasons=[ReasonCode.LIGHT_MUST_STOP]))
     elif float(light_state.speed_cap_ratio) < 1.0:
-        cands.append(Candidate(name="light", emergency_stop=False, speed_cap=float(light_state.speed_cap_ratio), reasons=[ReasonCode.LIGHT_YELLOW_SLOW]))
+        lr = ReasonCode.LIGHT_RED_SLOW if light_state.active_color == LightColor.RED else ReasonCode.LIGHT_YELLOW_SLOW
+        cands.append(Candidate(name="light", emergency_stop=False, speed_cap=float(light_state.speed_cap_ratio), reasons=[lr]))
 
     # sign
     if sign_state.must_stop_soon:

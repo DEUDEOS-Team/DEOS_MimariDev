@@ -1,0 +1,957 @@
+%% topic_referansi.tex
+%% DEOS — ROS 2 Topic Referans Kılavuzu
+%% Derlemek için: pdflatex topic_referansi.tex (2 geçiş)
+
+\documentclass[12pt,a4paper]{article}
+
+% -------------------------------------------------------------------------
+% Paketler
+% -------------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{microtype}
+\usepackage{parskip}
+
+\geometry{
+  left=2.0cm, right=2.0cm,
+  top=2.5cm, bottom=2.5cm
+}
+
+% -------------------------------------------------------------------------
+% Renkler
+% -------------------------------------------------------------------------
+\definecolor{sensorcolor}{RGB}{0,102,204}
+\definecolor{perceptioncolor}{RGB}{0,153,76}
+\definecolor{planningcolor}{RGB}{153,0,153}
+\definecolor{controlcolor}{RGB}{204,82,0}
+\definecolor{safetycolor}{RGB}{180,0,0}
+\definecolor{hwcolor}{RGB}{102,51,0}
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codecomment}{RGB}{100,100,100}
+
+% -------------------------------------------------------------------------
+% Listings (JSON örnekleri)
+% -------------------------------------------------------------------------
+\lstset{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{gray!40},
+  commentstyle=\color{codecomment},
+  showstringspaces=false,
+  numbers=none,
+}
+
+% -------------------------------------------------------------------------
+% Başlık stili
+% -------------------------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small DEOS — ROS 2 Topic Referans Kılavuzu}
+\fancyhead[R]{\small \thepage}
+\fancyfoot[C]{\small TEKNOFEST 2026 Robotaksi-Binek}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% Kategori başlığı makrosu
+\newcommand{\cathead}[2]{%
+  \noindent\colorbox{#1!15}{\parbox{\linewidth-2\fboxsep}{%
+    \textbf{\color{#1}\large #2}%
+  }}%
+  \vspace{2pt}%
+}
+
+% -------------------------------------------------------------------------
+% Belge
+% -------------------------------------------------------------------------
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  \vspace*{3cm}
+  {\Huge\bfseries DEOS\par}
+  \vspace{0.5cm}
+  {\Large ROS 2 Topic Referans Kılavuzu\par}
+  \vspace{1cm}
+  {\large TEKNOFEST 2026 Robotaksi-Binek Yarışması\par}
+  \vspace{0.5cm}
+  {\normalsize Tüm topic'ler, mesaj tipleri, veri formatları ve açıklamaları\par}
+  \vfill
+  {\small\color{gray} Bu belge otomatik olarak kaynak koddan türetilmiştir.\\
+  Tüm topic yolları \texttt{/deos} kök önekiyle başlar (\texttt{deos\_root=/deos}).}
+\end{titlepage}
+
+% -------------------------------------------------------------------------
+\tableofcontents
+\newpage
+
+% =========================================================================
+\section{Genel Mimari}
+% =========================================================================
+
+DEOS sistemi 7 ana katmandan oluşur. Her katman kendi topic'leri üzerinden
+haberleşir; doğrudan fonksiyon çağrısı yoktur.
+
+\begin{center}
+\begin{tabular}{@{}cll@{}}
+\toprule
+\textbf{Katman} & \textbf{Paket} & \textbf{Frekans} \\
+\midrule
+Sensörler       & \texttt{sensors/\{camera,imu,lidar\}} & 10--100 Hz \\
+Algı (Raw)      & \texttt{vision\_bridge, lane\_tracking} & 10--30 Hz \\
+Algı Füzyonu    & \texttt{vision\_bridge/perception\_fusion} & 20 Hz \\
+Planlama        & \texttt{mission\_planning} & GPS callback \\
+Şerit Kontrolü  & \texttt{lane\_tracking/lane\_control} & olay bazlı \\
+Kontrol         & \texttt{vehicle\_controller, stm32\_bridge} & 20 Hz \\
+Güvenlik        & \texttt{deos\_failsafe} & 20 Hz \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Topic İsimlendirme Kuralı}
+
+Tüm topic yolları \texttt{build\_deos\_topics(deos\_root)} fonksiyonuyla
+üretilir. Varsayılan kök \texttt{/deos}'tur:
+
+\begin{lstlisting}
+/deos/<katman>/<alt_katman>/<topic_adi>
+\end{lstlisting}
+
+Örnek: \texttt{/deos/perception/fusion/emergency\_stop}
+
+\subsection{Veri Tipleri Özeti}
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Tip} & \textbf{Kullanım} \\
+\midrule
+\texttt{std\_msgs/Bool}         & İkili sinyal (dur/git, aktif/pasif) \\
+\texttt{std\_msgs/Float32}      & Skaler oran/değer ([0,1] veya derece/m/s) \\
+\texttt{std\_msgs/Int32}        & Tam sayı sayaç \\
+\texttt{std\_msgs/Int8}         & Küçük tam sayı (niyet kodu) \\
+\texttt{std\_msgs/String}       & JSON yükü (yapılandırılmış veri) \\
+\texttt{std\_msgs/Float32MultiArray} & Düzleştirilmiş 2D nokta dizisi \\
+\texttt{sensor\_msgs/Image}     & Kamera görüntü çerçevesi \\
+\texttt{sensor\_msgs/CameraInfo}& Kamera iç parametreleri \\
+\texttt{sensor\_msgs/Imu}       & İvme + jiroskop + orientasyon \\
+\texttt{sensor\_msgs/NavSatFix} & GPS enlem/boylam/yükseklik \\
+\texttt{sensor\_msgs/PointCloud2} & 3D nokta bulutu \\
+\texttt{nav\_msgs/Odometry}     & Konum + hız + kovaryans \\
+\texttt{geometry\_msgs/Twist}   & Lineer ve açısal hız komutu \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\newpage
+
+% =========================================================================
+\section{Sensör Topic'leri}
+\label{sec:sensors}
+% =========================================================================
+
+\cathead{sensorcolor}{Katman: Sensors}
+
+Bu topic'ler doğrudan donanımdan gelen ham verileri taşır.
+Hiçbir filtre veya füzyon uygulanmaz.
+
+% ----- Tablo -----
+\begin{longtable}{@{}p{5.8cm} p{3.2cm} p{6.4cm}@{}}
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{\small\itshape (devam)} \\
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\texttt{/deos/sensors/camera/} \newline
+\texttt{color/image\_raw}
+& \texttt{sensor\_msgs/} \newline \texttt{Image}
+& Intel RealSense D415 RGB kamera çerçevesi.
+  Encoding: \texttt{bgr8}, çözünürlük: 640$\times$480 px (varsayılan).
+  Yayıncı: \texttt{realsense\_d415\_node}. \\[4pt]
+
+\texttt{/deos/sensors/camera/} \newline
+\texttt{depth/image\_raw}
+& \texttt{sensor\_msgs/} \newline \texttt{Image}
+& D415 derinlik görüntüsü.
+  Encoding: \texttt{16UC1}, birim: mm (1000 ile bölünce metre).
+  Yayıncı: \texttt{realsense\_d415\_node}. \\[4pt]
+
+\texttt{/deos/sensors/camera/} \newline
+\texttt{color/camera\_info}
+& \texttt{sensor\_msgs/} \newline \texttt{CameraInfo}
+& RGB kamera iç parametreleri: \texttt{K} matrisi (fx, fy, cx, cy),
+  distorsiyon katsayıları. Kalibrasyon sonrası doldurulur.
+  Yayıncı: \texttt{realsense\_d415\_node}. \\[4pt]
+
+\texttt{/deos/sensors/camera/} \newline
+\texttt{depth/camera\_info}
+& \texttt{sensor\_msgs/} \newline \texttt{CameraInfo}
+& Derinlik kamera iç parametreleri.
+  Stereo baseline ve derinlik faktörünü içerir.
+  Yayıncı: \texttt{realsense\_d415\_node}. \\[4pt]
+
+\texttt{/deos/sensors/imu/data}
+& \texttt{sensor\_msgs/Imu}
+& MPU-9250 / VectorNav / Xsens IMU verisi.
+  \texttt{linear\_acceleration} (m/s$^2$, xyz),
+  \texttt{angular\_velocity} (rad/s, xyz),
+  \texttt{orientation} quaternion (gyro-Z entegrasyonu).
+  Frekans: 100 Hz. Yayıncı: \texttt{imu\_node}. \\[4pt]
+
+\texttt{/deos/sensors/gps/fix}
+& \texttt{sensor\_msgs/} \newline \texttt{NavSatFix}
+& Ham GPS ölçümü. \texttt{latitude} / \texttt{longitude} (decimal degree),
+  \texttt{altitude} (m), \texttt{status.status=0} (STATUS\_FIX).
+  Yayıncı: \texttt{gps\_node} (pynmea2 ile seri port). \\[4pt]
+
+\texttt{/deos/sensors/gps/filtered}
+& \texttt{sensor\_msgs/} \newline \texttt{NavSatFix}
+& EKF filtreli GPS. \texttt{robot\_localization} paketi tarafından
+  IMU ile birleştirilerek üretilir. Ham GPS'e göre daha düşük gürültü. \\[4pt]
+
+\texttt{/deos/sensors/lidar/} \newline
+\texttt{points\_downsampled}
+& \texttt{sensor\_msgs/} \newline \texttt{PointCloud2}
+& Voxel grid ile örneklenmiş LiDAR nokta bulutu.
+  Frame: \texttt{base\_link}. x=ileri, y=sol, z=yukarı (REP-103).
+  \texttt{lidar\_obstacle\_node} bu topic'i tüketir. \\[4pt]
+
+\texttt{/deos/sensors/lidar/} \newline
+\texttt{cloud\_unstructured\_} \newline
+\texttt{fullframe}
+& \texttt{sensor\_msgs/} \newline \texttt{PointCloud2}
+& Tam çerçeve yapılandırılmamış bulut (örnekleme uygulanmamış).
+  \texttt{failsafe\_supervisor\_node} sağlık kontrolü için izler.
+  SICK multiSCAN165 çıkışı. \\
+
+\bottomrule
+\end{longtable}
+
+\newpage
+
+% =========================================================================
+\section{Algı (Perception) Topic'leri}
+\label{sec:perception_raw}
+% =========================================================================
+
+\cathead{perceptioncolor}{Katman: Perception — Ham Tespit}
+
+\begin{longtable}{@{}p{5.8cm} p{3.2cm} p{6.4cm}@{}}
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{\small\itshape (devam)} \\
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\texttt{/deos/perception/stereo/} \newline
+\texttt{detections}
+& \texttt{std\_msgs/String} \newline (JSON dizisi)
+& YOLO (Ultralytics veya Hailo-8) nesne tespitleri.
+  Yayıncı: \texttt{stereo\_detector\_node}.
+  Her nesne için \texttt{class\_name}, \texttt{confidence},
+  \texttt{bbox\_px}, \texttt{distance\_m} (derinlik görüntüsünden),
+  \texttt{lateral\_m} (pinhole modeli ile yan offset). \\[4pt]
+
+\texttt{/deos/perception/lidar/} \newline
+\texttt{obstacles}
+& \texttt{std\_msgs/String} \newline (JSON dizisi)
+& LiDAR DBSCAN küme çıkışları.
+  Yayıncı: \texttt{lidar\_obstacle\_node}.
+  Her küme için \texttt{kind} (barrier/cone/unknown),
+  \texttt{confidence}, \texttt{distance\_m}, \texttt{lateral\_m}.
+  Sadece şerit koridoru içindeki kümeler iletilir. \\[4pt]
+
+\texttt{/deos/perception/lane/} \newline
+\texttt{center\_pts}
+& \texttt{std\_msgs/} \newline \texttt{Float32MultiArray}
+& Şerit merkez noktaları (piksel koordinatı).
+  Düzleştirilmiş format: \texttt{[x0, y0, x1, y1, \ldots]}.
+  Yayıncı: \texttt{lane\_detection\_node} (YOLOv8-seg / Hailo).
+  \texttt{lane\_control\_node} bu topic'i tüketir. \\[4pt]
+
+\texttt{/deos/perception/lane/} \newline
+\texttt{debug}
+& \texttt{std\_msgs/String} \newline (JSON)
+& Şerit algı debug bilgisi: tespit edilen şerit sayısı,
+  mask koordinatları, güven skoru.
+  Sadece geliştirme/debug amacıyla yayınlanır. \\[4pt]
+
+\texttt{/deos/perception/lane/walls}
+& \texttt{sensor\_msgs/} \newline \texttt{PointCloud2}
+& Şerit duvarı/sınır nokta bulutu.
+  Frame: \texttt{base\_link}.
+  \texttt{perception\_fusion\_node} bu bulutu sol/sağ $y$ sınırına
+  dönüştürerek \texttt{LaneBounds} üretir.
+  Yayıncı: \texttt{lane\_detection\_node}. \\
+
+\bottomrule
+\end{longtable}
+
+\subsection{Stereo Detections — JSON Formatı}
+
+\begin{lstlisting}[language={}]
+[
+  {
+    "class_name": "pedestrian",   // DEOS canonical sinif adi
+    "confidence": 0.91,           // [0.0 - 1.0]
+    "bbox_px": [120.0, 85.0, 210.0, 320.0],  // [x1, y1, x2, y2]
+    "distance_m": 4.2,            // derinlik ornek medyani (null olabilir)
+    "lateral_m": 0.35             // pozitif = sol (REP-103), null olabilir
+  },
+  ...
+]
+\end{lstlisting}
+
+\subsection{LiDAR Obstacles — JSON Formatı}
+
+\begin{lstlisting}[language={}]
+[
+  {
+    "kind": "barrier",     // "pedestrian" | "cone" | "barrier" | "unknown"
+    "confidence": 0.85,
+    "distance_m": 3.1,
+    "lateral_m": -0.6,    // negatif = sag
+    "bbox_px": null        // LiDAR icin genellikle null
+  },
+  ...
+]
+\end{lstlisting}
+
+\newpage
+
+% =========================================================================
+\section{Algı Füzyon Topic'leri}
+\label{sec:fusion}
+% =========================================================================
+
+\cathead{perceptioncolor}{Katman: Perception Fusion}
+
+\texttt{perception\_fusion\_node} 20 Hz'de çalışır; tüm algı modüllerini
+(trafik ışığı, tabela, engel, park, slalom) birleştirip
+\texttt{DecisionArbiter} üzerinden tek karar üretir.
+
+\begin{longtable}{@{}p{5.8cm} p{3.2cm} p{6.4cm}@{}}
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{\small\itshape (devam)} \\
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\texttt{/deos/perception/fusion/} \newline
+\texttt{emergency\_stop}
+& \texttt{std\_msgs/Bool}
+& \textbf{Acil dur kararı.} \texttt{true} ise araç derhal durmalıdır.
+  Kırmızı ışık ($\leq$3 m), NO\_ENTRY tabelası, yaya ($\leq$5 m) veya
+  tüm sensörler kaybolduğunda üretilir.
+  Tüketici: \texttt{vehicle\_controller\_node}. \\[4pt]
+
+\texttt{/deos/perception/fusion/} \newline
+\texttt{speed\_cap}
+& \texttt{std\_msgs/Float32}
+& \textbf{Hız üst limiti oranı.} Aralık: [0.0, 1.0].
+  Tüm adaylar arasında minimum alınır (arbiter).
+  0.0 = tam dur, 1.0 = kısıtlama yok.
+  Tüketici: \texttt{vehicle\_controller\_node}. \\[4pt]
+
+\texttt{/deos/perception/fusion/} \newline
+\texttt{steering\_override}
+& \texttt{std\_msgs/Float32}
+& \textbf{Direksiyon geçersiz kılma değeri.} Aralık: [-1.0, 1.0].
+  Pozitif = sağa dönüş. Yalnızca \texttt{has\_steering\_override}
+  \texttt{true} iken geçerlidir. Tüketici: \texttt{vehicle\_controller\_node}. \\[4pt]
+
+\texttt{/deos/perception/fusion/} \newline
+\texttt{has\_steering\_override}
+& \texttt{std\_msgs/Bool}
+& \textbf{Override aktif mi?} \texttt{true} ise \texttt{vehicle\_controller}
+  GPS planlama steering'i değil \texttt{steering\_override}'ı kullanır.
+  Şerit algısı tazeyken (0.5 s) aktifleşir. \\[4pt]
+
+\texttt{/deos/perception/fusion/} \newline
+\texttt{park\_complete}
+& \texttt{std\_msgs/Bool}
+& \textbf{Park manevra tamamlandı sinyali.}
+  \texttt{ParkingLogic} PARKED fazına geçince \texttt{true} yayınlar.
+  Tüketici: \texttt{mission\_planning\_node} (waypoint'i ilerletir). \\[4pt]
+
+\texttt{/deos/perception/fusion/} \newline
+\texttt{turn\_permissions}
+& \texttt{std\_msgs/String} \newline (JSON)
+& \textbf{Dönüş izinleri.} Tabela tespitlerinden üretilir.
+  Tüketici: \texttt{mission\_planning\_node} (rota yeniden planlama). \\[4pt]
+
+\texttt{/deos/perception/fusion/} \newline
+\texttt{decision\_debug}
+& \texttt{std\_msgs/String} \newline (JSON)
+& \textbf{Karar debug bilgisi.} Tüm aday kararları ve final kararı içerir.
+  \texttt{entry\_blocked} alanı NO\_ENTRY tabela tespitini bildirir.
+  Tüketici: \texttt{mission\_planning\_node}. \\[4pt]
+
+\texttt{/deos/perception/fusion/} \newline
+\texttt{green\_elapsed\_s}
+& \texttt{std\_msgs/Float32}
+& \textbf{Yeşil ışık geçen süre (saniye).}
+  Yeşil onaylandığı andan bu yana geçen süre.
+  -1.0 = yeşil ışık yok/algılanmadı.
+  Şartname: $\leq$5 s = +40p, 5--30 s = +20p, $>$30 s = $-$20p.
+  Tüketici: \texttt{vehicle\_controller\_node} (diagnostik log). \\
+
+\bottomrule
+\end{longtable}
+
+\subsection{Turn Permissions — JSON Formatı}
+
+\begin{lstlisting}[language={}]
+{
+  "left": true,          // sol done izni
+  "straight": true,      // duz gitme izni
+  "right": false,        // sag done yasak (NO_RIGHT_TURN)
+  "forced_direction": null  // "left"|"right"|"straight"|
+                            // "pass_left"|"pass_right"|
+                            // "roundabout"|null
+}
+\end{lstlisting}
+
+\subsection{Decision Debug — JSON Formatı}
+
+\begin{lstlisting}[language={}]
+{
+  "ts_monotonic": 12345.678,
+  "fresh": {
+    "stereo": true,        // stereo veri taze mi (<0.5 s)
+    "lidar": true,         // lidar veri taze mi (<0.5 s)
+    "lane_walls": false    // serit duvari taze mi (<0.5 s)
+  },
+  "lane_bounds": {
+    "left_y_m": 1.5,       // sol serit siniri (base_link, metre)
+    "right_y_m": -1.5,     // sag serit siniri
+    "margin_m": 0.25       // guvenlik marji
+  },
+  "entry_blocked": false,  // NO_ENTRY tabelasi algilandi mi
+  "candidates": [
+    {
+      "name": "light",
+      "emergency_stop": true,
+      "speed_cap": 0.0,
+      "steer_override": 0.0,
+      "reasons": ["light_must_stop"]
+    }
+  ],
+  "final": {
+    "emergency_stop": true,
+    "speed_cap": 0.0,
+    "has_steer_override": false,
+    "steer_override": 0.0,
+    "reasons": ["light_must_stop"]
+  }
+}
+\end{lstlisting}
+
+\subsection{Reason Code Listesi}
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Kod} & \textbf{Anlamı} \\
+\midrule
+\texttt{light\_must\_stop}        & Kırmızı ışık → acil dur \\
+\texttt{light\_red\_slow}         & Kırmızı ışık → yavaşlama bandı \\
+\texttt{light\_yellow\_slow}      & Sarı ışık → yavaşlama \\
+\texttt{sign\_must\_stop}         & DUR tabelası → acil dur \\
+\texttt{sign\_speed\_cap}         & Tabela kaynaklı hız kısıtı \\
+\texttt{obstacle\_emergency\_stop}& Engel (LiDAR/stereo) → acil dur \\
+\texttt{road\_blocked}            & Yol tamamen tıkandı \\
+\texttt{static\_avoid}            & Statik engel → şerit değiştirme \\
+\texttt{dynamic\_avoid}           & Dinamik engel (yaya) → yavaş geçiş \\
+\texttt{park\_mode}               & Park arama/manevra modu \\
+\texttt{park\_no\_eligible}       & İzinli park slotu bulunamadı \\
+\texttt{slalom}                   & Slalom (koni) manevra \\
+\texttt{all\_sensors\_lost}       & Tüm sensörler zaman aşımında \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\newpage
+
+% =========================================================================
+\section{Planlama Topic'leri}
+\label{sec:planning}
+% =========================================================================
+
+\cathead{planningcolor}{Katman: Mission Planning}
+
+\texttt{mission\_planning\_node}, GeoJSON görev dosyasını okur; GPS
+callback'lerinde waypoint takibi yapar ve gerektiğinde Dijkstra ile
+yeniden rota hesaplar.
+
+\begin{longtable}{@{}p{5.8cm} p{3.2cm} p{6.4cm}@{}}
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{\small\itshape (devam)} \\
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\texttt{/deos/planning/steering\_ref}
+& \texttt{std\_msgs/Float32}
+& \textbf{GPS bazlı direksiyon referansı.} Aralık: [-1.0, 1.0].
+  Haversine azimuth + enine sapma (XTE) kombinasyonu ile hesaplanır.
+  Tüketici: \texttt{vehicle\_controller\_node}
+  (\texttt{lane\_control} taze değilse bu referans kullanılır). \\[4pt]
+
+\texttt{/deos/planning/speed\_limit}
+& \texttt{std\_msgs/Float32}
+& \textbf{Planlama hız limiti oranı.} Aralık: [0.0, 1.0].
+  Waypoint \texttt{speed\_limit\_ratio} $\times$ görev kısıt oranı.
+  GPS zaman aşımında kademeli düşer (2 s sonra $\times$0.5, 5 s sonra 0).
+  Tüketici: \texttt{vehicle\_controller\_node}. \\[4pt]
+
+\texttt{/deos/planning/current\_task}
+& \texttt{std\_msgs/String}
+& \textbf{Aktif görev türü.}
+  Değerler: \texttt{pickup} | \texttt{dropoff} | \texttt{park} |
+  \texttt{checkpoint} | \texttt{waiting\_go} | boş.
+  Bilgi amaçlı; kontrol katmanı bu değeri okumaz. \\[4pt]
+
+\texttt{/deos/planning/arrived}
+& \texttt{std\_msgs/Bool}
+& \textbf{Hedefe varış sinyali.}
+  Araç waypoint varış yarıçapı içine girince \texttt{true}.
+  PICKUP/DROPOFF waypoint'lerinde ek olarak 30° heading toleransı aranır. \\[4pt]
+
+\texttt{/deos/planning/park\_mode}
+& \texttt{std\_msgs/Bool}
+& \textbf{Park arama/manevra modu.}
+  \texttt{true} iken \texttt{perception\_fusion\_node},
+  \texttt{ParkingLogic} adayını aktifleştirir.
+  Tüketici: \texttt{perception\_fusion\_node}. \\[4pt]
+
+\texttt{/deos/planning/park\_remaining\_s}
+& \texttt{std\_msgs/Float32}
+& \textbf{Park manevra kalan süresi (saniye).}
+  Şartname: araç park alanına girdikten sonra 3 dakika içinde
+  park etmelidir. Bu topic sayaçtan kalan süreyi yayınlar.
+  0.0 = süre doldu veya park tamamlandı. \\
+
+\bottomrule
+\end{longtable}
+
+\newpage
+
+% =========================================================================
+\section{Şerit Kontrol Topic'leri}
+\label{sec:lane}
+% =========================================================================
+
+\cathead{controlcolor}{Katman: Lane Control}
+
+\texttt{lane\_control\_node}, şerit merkez noktalarından direksiyon ve hız
+referansı üretir. \texttt{vehicle\_controller\_node} bu referansları
+GPS planlamasına alternatif olarak tazelik kontrolüyle seçer.
+
+\begin{longtable}{@{}p{5.8cm} p{3.2cm} p{6.4cm}@{}}
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{\small\itshape (devam)} \\
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\texttt{/deos/lane/steering\_ref}
+& \texttt{std\_msgs/Float32}
+& \textbf{Şerit bazlı direksiyon referansı.} Aralık: [-1.0, 1.0].
+  Merkez noktaların yarı noktasından sapma olarak hesaplanır
+  (\texttt{steer\_cmd\_mul=0.65} ile ölçeklenir).
+  Tüketici: \texttt{vehicle\_controller\_node}
+  (\texttt{lane\_timeout=0.2 s} ile tazelik kontrolü). \\[4pt]
+
+\texttt{/deos/lane/speed\_limit}
+& \texttt{std\_msgs/Float32}
+& \textbf{Şerit bazlı hız limiti.} Aralık: [0.0, 1.0].
+  Düz: 0.5, dönüş ($|$steer$|>$0.2): 0.35.
+  Şerit kaybolduğunda 1 s içinde son değerin 0.8 katına düşer,
+  sonra 0.0 olur.
+  Tüketici: \texttt{vehicle\_controller\_node}. \\[4pt]
+
+\texttt{/deos/control/intent}
+& \texttt{std\_msgs/Int8}
+& \textbf{Şerit değiştirme niyeti.}
+  1 = sola geç, 2 = sağa geç, 0 = sıfırla.
+  Yayıncı: üst katman (henüz tam entegre değil).
+  Tüketici: \texttt{lane\_control\_node}
+  (\texttt{use\_intent=false} varsayılan). \\
+
+\bottomrule
+\end{longtable}
+
+\newpage
+
+% =========================================================================
+\section{Lokalizasyon Topic'leri}
+\label{sec:localization}
+% =========================================================================
+
+\cathead{hwcolor}{Katman: Localization}
+
+\begin{longtable}{@{}p{5.8cm} p{3.2cm} p{6.4cm}@{}}
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{\small\itshape (devam)} \\
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\texttt{/deos/localization/odom/gps}
+& \texttt{nav\_msgs/Odometry}
+& \textbf{GPS odometrisi.}
+  \texttt{navsat\_transform\_node} (robot\_localization) tarafından
+  NavSatFix $\rightarrow$ Odometry dönüşümü.
+  Yüksek gürültülü; EKF'e girdi olarak kullanılır. \\[4pt]
+
+\texttt{/deos/localization/odom/ekf}
+& \texttt{nav\_msgs/Odometry}
+& \textbf{EKF füzyon odometrisi.}
+  \texttt{robot\_localization/ekf\_node}: GPS + IMU birleşimi.
+  \texttt{pose.pose.orientation} quaternion'dan heading hesaplanır.
+  Tüketici: \texttt{final\_odom\_node}. \\[4pt]
+
+\texttt{/odometry/icp}
+& \texttt{nav\_msgs/Odometry}
+& \textbf{LiDAR ICP odometrisi.}
+  \texttt{pcl\_localization\_ros2} paketinin varsayılan çıkışı.
+  Önek olmaksızın kök namespace'de yayınlanır (remap gerekebilir).
+  Tüketici: \texttt{final\_odom\_node}. \\[4pt]
+
+\texttt{/deos/localization/odom/final}
+& \texttt{nav\_msgs/Odometry}
+& \textbf{Birleşik nihai odometri.}
+  \texttt{final\_odom\_node}: ICP verisi tazeyse ($<$0.2 s)
+  ICP kullanılır, aksi hâlde EKF'e düşülür.
+  Tüketici: \texttt{mission\_planning\_node}
+  (heading kaynağı olarak, \texttt{heading\_source=final\_odom}). \\
+
+\bottomrule
+\end{longtable}
+
+\newpage
+
+% =========================================================================
+\section{Donanım ve Kontrol Topic'leri}
+\label{sec:control}
+% =========================================================================
+
+\cathead{controlcolor}{Katman: Hardware / Control}
+
+\begin{longtable}{@{}p{5.8cm} p{3.2cm} p{6.4cm}@{}}
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{\small\itshape (devam)} \\
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\texttt{/deos/hardware/motion\_enable}
+& \texttt{std\_msgs/Bool}
+& \textbf{STM32 hareket izni.}
+  \texttt{false} = DUR (algoritmalar durdurulur),
+  \texttt{true} = DEVAM. Olay bazlı yayın (sadece değişimde).
+  0.5 s zaman aşımı: mesaj gelmezse \texttt{fail\_safe\_stop=true}
+  ise acil dur. Yayıncı: STM32 (micro-ROS). \\[4pt]
+
+\texttt{/deos/hardware/autonomy\_enable}
+& \texttt{std\_msgs/Bool}
+& \textbf{Otonom mod etkin mi.}
+  \texttt{false} = manuel sürüş (algı/kontrol node'ları
+  \texttt{/cmd\_vel} yayınlamaz, STM32'ye bırakır).
+  Yayıncı: operatör / STM32. \\[4pt]
+
+\texttt{/deos/control/cmd\_vel}
+& \texttt{geometry\_msgs/Twist}
+& \textbf{Araç hız komutu.}
+  \texttt{linear.x} = hedef hız (m/s, [0, max\_speed]).
+  \texttt{angular.z} = dönüş hızı (rad/s, [$-$max\_steer, +max\_steer]).
+  Yayıncı: \texttt{vehicle\_controller\_node}.
+  Tüketici: \texttt{stm32\_bridge\_node}. \\
+
+\bottomrule
+\end{longtable}
+
+\newpage
+
+% =========================================================================
+\section{Güvenlik Topic'leri}
+\label{sec:safety}
+% =========================================================================
+
+\cathead{safetycolor}{Katman: Safety}
+
+\begin{longtable}{@{}p{5.8cm} p{3.2cm} p{6.4cm}@{}}
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{\small\itshape (devam)} \\
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\texttt{/deos/safety/emergency\_stop}
+& \texttt{std\_msgs/Bool}
+& \textbf{STM32'ye acil dur pulse'u.}
+  Yayıncı: \texttt{vehicle\_controller\_node}.
+  Yükselen kenarda sınırlı sayıda \texttt{true} pulse üretilir
+  (\texttt{safety\_emergency\_stop\_pulse\_count=3}).
+  Acil dur kalktıktan sonra \texttt{false} gönderilir. \\[4pt]
+
+\texttt{/deos/safety/lane/violation}
+& \texttt{std\_msgs/Bool}
+& \textbf{Anlık şerit ihlali durumu.}
+  \texttt{true} = aracın iki tekerleği şerit dışında.
+  Araç yarı genişliği (\texttt{vehicle\_half\_width\_m=0.75 m})
+  ile şerit sınırları karşılaştırılır.
+  Yayıncı: \texttt{perception\_fusion\_node}. \\[4pt]
+
+\texttt{/deos/safety/lane/violation\_count}
+& \texttt{std\_msgs/Int32}
+& \textbf{Şerit ihlal sayacı.}
+  Her \texttt{violation\_bucket\_s=10 s} penceresinde
+  ihlal varsa +1 artırılır. Şartname takibi için.
+  Yayıncı: \texttt{perception\_fusion\_node}. \\[4pt]
+
+\texttt{/deos/safety/lane/violation\_seconds}
+& \texttt{std\_msgs/Float32}
+& \textbf{Toplam ihlal süresi (saniye).}
+  Araç şerit dışında geçirdiği kümülatif süre.
+  Yayıncı: \texttt{perception\_fusion\_node}. \\
+
+\bottomrule
+\end{longtable}
+
+\newpage
+
+% =========================================================================
+\section{Aktüatör Topic'leri}
+\label{sec:actuators}
+% =========================================================================
+
+\cathead{hwcolor}{Katman: Actuators (STM32)}
+
+\texttt{stm32\_bridge\_node}, \texttt{/cmd\_vel} (Twist) mesajını STM32
+mikroişlemcisinin anlayacağı düşük seviyeli komutlara dönüştürür.
+
+\begin{longtable}{@{}p{5.8cm} p{3.2cm} p{6.4cm}@{}}
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{\small\itshape (devam)} \\
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\texttt{/deos/actuators/stm32/} \newline
+\texttt{speed\_delta\_mps}
+& \texttt{std\_msgs/Float32}
+& \textbf{Hız delta komutu (m/s).}
+  Bir önceki hedef hız ile fark: $\Delta v = v_{hedef} - v_{önceki}$.
+  Pozitif = hızlan, negatif = yavaşla.
+  Varsayılan mod (\texttt{publish\_speed\_delta=true}).
+  Yayıncı: \texttt{stm32\_bridge\_node}. \\[4pt]
+
+\texttt{/deos/actuators/stm32/} \newline
+\texttt{speed\_target\_mps}
+& \texttt{std\_msgs/Float32}
+& \textbf{Hedef hız (m/s).}
+  Mutlak hedef hız değeri. Varsayılan kapalı
+  (\texttt{publish\_speed\_target=false}).
+  Yayıncı: \texttt{stm32\_bridge\_node}. \\[4pt]
+
+\texttt{/deos/actuators/stm32/} \newline
+\texttt{steering\_deg}
+& \texttt{std\_msgs/Float32}
+& \textbf{Direksiyon açısı (derece).}
+  Aralık: [$-$540.0, +540.0].
+  Normalize steer oranı $\times$ \texttt{steer\_deg\_limit}.
+  Pozitif = sağa. 2 ondalık basamak hassasiyetiyle yuvarlanır.
+  Yayıncı: \texttt{stm32\_bridge\_node}. \\
+
+\bottomrule
+\end{longtable}
+
+\newpage
+
+% =========================================================================
+\section{Failsafe Topic'leri}
+\label{sec:failsafe}
+% =========================================================================
+
+\cathead{safetycolor}{Katman: FailSafe Supervisor}
+
+\texttt{failsafe\_supervisor\_node} bağımsız bir güvenlik katmanıdır.
+Sensör/algı/planlama/kontrol sağlığını izler; sorun tespitinde
+\texttt{vehicle\_controller\_node}'u geçersiz kılar.
+
+\begin{longtable}{@{}p{5.8cm} p{3.2cm} p{6.4cm}@{}}
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{\small\itshape (devam)} \\
+\toprule
+\textbf{Topic Yolu} & \textbf{Mesaj Tipi} & \textbf{Açıklama} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\texttt{/deos/failsafe/out/} \newline
+\texttt{emergency\_stop}
+& \texttt{std\_msgs/Bool}
+& \textbf{Failsafe acil dur çıkışı.}
+  Sensör zaman aşımı, aşırı hız, planlama hatası vb. durumlarda
+  \texttt{true}. \texttt{vehicle\_controller\_node} bu sinyali
+  \texttt{perception} acil dururundan bağımsız olarak uygular. \\[4pt]
+
+\texttt{/deos/failsafe/out/speed\_cap}
+& \texttt{std\_msgs/Float32}
+& \textbf{Failsafe hız tavanı.} Aralık: [0.0, 1.0].
+  Sensör sağlığı veya planlama doğrulaması başarısız olduğunda
+  düşer. \texttt{vehicle\_controller\_node}'da \texttt{perception}
+  speed\_cap ile \texttt{min()} alınır. \\[4pt]
+
+\texttt{/deos/failsafe/out/diagnostics}
+& \texttt{std\_msgs/String} \newline (JSON)
+& \textbf{Failsafe durum diagnostiği.}
+  Sensor/algı/planlama/kontrol sağlık skorları,
+  zaman aşımları, FSM durumu. Debug/log amaçlı. \\[4pt]
+
+\texttt{/deos/failsafe/in/fsm\_reset}
+& \texttt{std\_msgs/Bool}
+& \textbf{FSM sıfırlama komutu.}
+  \texttt{true} → \texttt{FailSafeDecisionCore} sıfırlanır.
+  Manuel müdahale veya görev başlangıcında kullanılır.
+  Yayıncı: operatör / üst katman. \\
+
+\bottomrule
+\end{longtable}
+
+\newpage
+
+% =========================================================================
+\section{Topic Akış Özeti}
+\label{sec:flow}
+% =========================================================================
+
+\subsection{Acil Dur Zinciri}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Kaynak} & \textbf{Topic} & \textbf{Alıcı} \\
+\midrule
+\texttt{perception\_fusion} & \texttt{.../fusion/emergency\_stop} & \texttt{vehicle\_controller} \\
+\texttt{failsafe\_supervisor} & \texttt{.../failsafe/out/emergency\_stop} & \texttt{vehicle\_controller} \\
+\texttt{vehicle\_controller} & \texttt{.../safety/emergency\_stop} & STM32 (micro-ROS) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Hız Kısıtı Zinciri}
+
+\[
+v_{final} = \min\!\left(
+  v_{plan},\;
+  \texttt{speed\_cap}_{perception},\;
+  \texttt{speed\_cap}_{failsafe},\;
+  v_{lane}
+\right) \times v_{max}
+\]
+
+\subsection{Direksiyon Seçim Mantığı}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Koşul} & \textbf{Kullanılan Referans} & \textbf{Kaynak} \\
+\midrule
+\texttt{has\_steer\_override = true} & \texttt{steering\_override} & \texttt{perception\_fusion} \\
+\texttt{lane\_control} taze (0.2 s) & \texttt{lane/steering\_ref} & \texttt{lane\_control\_node} \\
+diğer & \texttt{planning/steering\_ref} & \texttt{mission\_planning} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Replanning Tetikleyicileri}
+
+\texttt{mission\_planning\_node} aşağıdaki koşullarda Dijkstra ile yeniden rota hesaplar:
+
+\begin{itemize}[noitemsep]
+  \item \texttt{decision\_debug.final.reasons} içinde \texttt{"road\_blocked"} var
+  \item \texttt{decision\_debug.entry\_blocked = true} (NO\_ENTRY tabelası)
+  \item Sonraki waypoint'e $\leq$8 m kaldıyken aktif dönüş kısıtı var
+\end{itemize}
+
+\vfill
+
+\begin{center}
+\small\color{gray}
+DEOS Topic Referans Kılavuzu — ROS 2 Jazzy —
+\texttt{deos\_root=/deos} varsayılan kök
+\end{center}
+
+\end{document}

@@ -25,16 +25,18 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'filter_field_name': 'z',
-                'filter_limit_min': -0.5, 
-                'filter_limit_max': 2.0,  
+                'filter_limit_min': -0.5,
+                'filter_limit_max': 2.0,
                 'filter_limit_negative': False,
-                'leaf_size': 0.2,         
-                'input_frame': 'cloud',   
+                'leaf_size': 0.2,
+                'input_frame': 'cloud',
                 'output_frame': 'base_link'
             }],
             remappings=[
-                ('input', '/cloud'),            
-                ('output', '/points_downsampled') 
+                # sick_scan_xd multiscan varsayılan çıkış topic'i
+                ('input', '/cloud_unstructured_fullframe'),
+                # lidar_obstacle_node'un beklediği DEOS namespace'li topic
+                ('output', '/deos/sensors/lidar/points_downsampled')
             ]
         )
     ])

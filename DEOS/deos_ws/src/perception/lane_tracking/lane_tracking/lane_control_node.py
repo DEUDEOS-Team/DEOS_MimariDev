@@ -8,6 +8,8 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32, Float32MultiArray, Int8
 
+from deos_algorithms.ros_topic_layout import build_deos_topics
+
 
 class LaneControlNode(Node):
     """
@@ -22,16 +24,18 @@ class LaneControlNode(Node):
     def __init__(self):
         super().__init__("lane_control_node")
 
-        self.declare_parameter("center_pts_topic", "/perception/center_pts")
-        self.declare_parameter("lane_steer_topic", "/lane/steering_ref")
-        self.declare_parameter("lane_speed_topic", "/lane/speed_limit")
-        self.declare_parameter("camera_w", 1280)
-        self.declare_parameter("camera_h", 960)
+        self.declare_parameter("deos_root", "/deos")
+        _T = build_deos_topics(str(self.get_parameter("deos_root").value))
+        self.declare_parameter("center_pts_topic", _T["perception_lane_center_pts"])
+        self.declare_parameter("lane_steer_topic", _T["lane_steering_ref"])
+        self.declare_parameter("lane_speed_topic", _T["lane_speed_limit"])
+        self.declare_parameter("camera_w", 640)   # D415 node 640x480 yayınlar
+        self.declare_parameter("camera_h", 480)
         self.declare_parameter("steer_cmd_mul", 0.65)
         self.declare_parameter("lane_lost_patience_s", 1.0)
 
         # intent (opsiyonel): 1=sol, 2=sağ, 0=reset
-        self.declare_parameter("intent_topic", "/control/intent")
+        self.declare_parameter("intent_topic", _T["control_intent"])
         self.declare_parameter("use_intent", False)
 
         self._cam_w = float(self.get_parameter("camera_w").value)

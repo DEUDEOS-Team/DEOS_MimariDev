@@ -13,9 +13,10 @@ from deos_algorithms.parking_logic import ParkingLogic
 from deos_algorithms.perception_fusion import fuse, parking_detections_from_signs
 from deos_algorithms.decision_arbiter import Candidate, DecisionArbiter, LaneBounds, ReasonCode, lane_contains_lateral
 from deos_algorithms.lane_violation import LaneViolationTracker, wheels_outside_lane
+from deos_algorithms.ros_topic_layout import build_deos_topics
 from deos_algorithms.sensors.types import ImuSample, LidarObstacle, StereoBbox
 from deos_algorithms.slalom_logic import SlalomLogic
-from deos_algorithms.traffic_light_logic import TrafficLightLogic
+from deos_algorithms.traffic_light_logic import LightColor, TrafficLightLogic
 from deos_algorithms.traffic_sign_logic import TrafficSignLogic
 
 
@@ -27,18 +28,37 @@ class PerceptionFusionNode(Node):
     def __init__(self):
         super().__init__("perception_fusion_node")
 
-        self.declare_parameter("hardware_motion_enable_topic", "/hardware/motion_enable")
+        self.declare_parameter("deos_root", "/deos")
+        _T = build_deos_topics(str(self.get_parameter("deos_root").value))
+
+        self.declare_parameter("hardware_motion_enable_topic", _T["hardware_motion_enable"])
         self.declare_parameter("hardware_motion_enable_timeout_s", 0.5)
         self.declare_parameter("hardware_motion_enable_fail_safe_stop", True)
         # Manuel/otonom ayrımı: otonom kapalıysa algı kararları yayınlamayı durdur (nötr publish)
-        self.declare_parameter("autonomy_enable_topic", "/hardware/autonomy_enable")
+        self.declare_parameter("autonomy_enable_topic", _T["hardware_autonomy_enable"])
         self.declare_parameter("require_autonomy_enable", True)
         # Sensör fail-safe (lokal planlama): veri yoksa hız düşür / dur
         self.declare_parameter("fail_safe_stop_on_all_sensors_lost", True)
         self.declare_parameter("lidar_missing_speed_cap", 0.20)   # engel için kritik
         self.declare_parameter("stereo_missing_speed_cap", 0.30)  # ışık/tabela için kritik
         # Şerit dışına çıkmamak: engel kaçınma override'ı sadece şerit algısı tazeyken aktif olsun
-        self.declare_parameter("lane_walls_topic", "/lane_walls")
+        self.declare_parameter("lane_walls_topic", _T["perception_lane_walls"])
+        self.declare_parameter("stereo_detections_topic", _T["perception_stereo_detections"])
+        self.declare_parameter("lidar_obstacles_topic", _T["perception_lidar_obstacles"])
+        self.declare_parameter("imu_topic", _T["sensors_imu"])
+        self.declare_parameter("planning_park_mode_topic", _T["planning_park_mode"])
+        self.declare_parameter("perception_fusion_emergency_stop_topic", _T["perception_fusion_emergency_stop"])
+        self.declare_parameter("perception_fusion_speed_cap_topic", _T["perception_fusion_speed_cap"])
+        self.declare_parameter("perception_fusion_steering_override_topic", _T["perception_fusion_steering_override"])
+        self.declare_parameter(
+            "perception_fusion_has_steering_override_topic", _T["perception_fusion_has_steering_override"]
+        )
+        self.declare_parameter("perception_fusion_park_complete_topic", _T["perception_fusion_park_complete"])
+        self.declare_parameter("perception_fusion_turn_permissions_topic", _T["perception_fusion_turn_permissions"])
+        self.declare_parameter("perception_fusion_decision_debug_topic", _T["perception_fusion_decision_debug"])
+        self.declare_parameter("safety_lane_violation_topic", _T["safety_lane_violation"])
+        self.declare_parameter("safety_lane_violation_count_topic", _T["safety_lane_violation_count"])
+        self.declare_parameter("safety_lane_violation_seconds_topic", _T["safety_lane_violation_seconds"])
         self.declare_parameter("require_lane_walls_for_avoidance", True)
         # Lane bounds çıkarımı (şerit içinde kalma kısıtı için)
         self.declare_parameter("lane_bounds_min_points", 20)
@@ -47,13 +67,28 @@ class PerceptionFusionNode(Node):
         self.declare_parameter("lane_bounds_z_max_m", 0.3)
         self.declare_parameter("lane_bounds_margin_m", 0.25)
         self.declare_parameter("publish_decision_debug", True)
+        self.declare_parameter("perception_fusion_green_elapsed_s_topic", _T["perception_fusion_green_elapsed_s"])
         # Şerit ihlali metriği (şartname): 2 tekerlek dışarı + 10s bucket sayacı
         self.declare_parameter("publish_lane_violation", True)
         self.declare_parameter("vehicle_half_width_m", 0.75)  # yaklaşık: araç genişliği/2
         self.declare_parameter("lane_violation_bucket_s", 10.0)
+        # Kırmızı ışık mesafe bantları (safety_logic / şartname mesafe tablosu ile aynı varsayılanlar)
+        self.declare_parameter("traffic_light_red_emergency_m", 3.0)
+        self.declare_parameter("traffic_light_red_hard_m", 8.0)
+        self.declare_parameter("traffic_light_red_soft_m", 15.0)
+        self.declare_parameter("traffic_light_red_hard_speed_ratio", 0.5)
+        self.declare_parameter("traffic_light_red_soft_speed_ratio", 0.8)
+        self.declare_parameter("traffic_light_red_unknown_must_stop", True)
 
         self._sign = TrafficSignLogic()
-        self._light = TrafficLightLogic()
+        self._light = TrafficLightLogic(
+            red_emergency_m=float(self.get_parameter("traffic_light_red_emergency_m").value),
+            red_hard_m=float(self.get_parameter("traffic_light_red_hard_m").value),
+            red_soft_m=float(self.get_parameter("traffic_light_red_soft_m").value),
+            red_hard_speed_ratio=float(self.get_parameter("traffic_light_red_hard_speed_ratio").value),
+            red_soft_speed_ratio=float(self.get_parameter("traffic_light_red_soft_speed_ratio").value),
+            red_unknown_must_stop=bool(self.get_parameter("traffic_light_red_unknown_must_stop").value),
+        )
         self._obstacle = ObstacleLogic()
         self._slalom = SlalomLogic()
         self._parking = ParkingLogic()
@@ -81,10 +116,10 @@ class PerceptionFusionNode(Node):
         # Planning -> Perception: park arama/manevra modu
         self._park_mode: bool = False
 
-        self.create_subscription(String, "/perception/stereo_detections", self._stereo_cb, 10)
-        self.create_subscription(String, "/perception/lidar_obstacles", self._lidar_cb, 10)
-        self.create_subscription(Imu, "/imu/data", self._imu_cb, 10)
-        self.create_subscription(Bool, "/planning/park_mode", self._park_mode_cb, 10)
+        self.create_subscription(String, str(self.get_parameter("stereo_detections_topic").value), self._stereo_cb, 10)
+        self.create_subscription(String, str(self.get_parameter("lidar_obstacles_topic").value), self._lidar_cb, 10)
+        self.create_subscription(Imu, str(self.get_parameter("imu_topic").value), self._imu_cb, 10)
+        self.create_subscription(Bool, str(self.get_parameter("planning_park_mode_topic").value), self._park_mode_cb, 10)
         self.create_subscription(
             PointCloud2,
             str(self.get_parameter("lane_walls_topic").value),
@@ -96,16 +131,37 @@ class PerceptionFusionNode(Node):
         self.create_subscription(Bool, motion_topic, self._motion_enable_cb, 10)
         self.create_subscription(Bool, str(self.get_parameter("autonomy_enable_topic").value), self._autonomy_cb, 10)
 
-        self._pub_estop = self.create_publisher(Bool, "/perception/emergency_stop", 10)
-        self._pub_speed = self.create_publisher(Float32, "/perception/speed_cap", 10)
-        self._pub_steer = self.create_publisher(Float32, "/perception/steering_override", 10)
-        self._pub_has_steer = self.create_publisher(Bool, "/perception/has_steering_override", 10)
-        self._pub_park_complete = self.create_publisher(Bool, "/perception/park_complete", 10)
-        self._pub_turn_permissions = self.create_publisher(String, "/perception/turn_permissions", 10)
-        self._pub_decision_debug = self.create_publisher(String, "/perception/decision_debug", 10)
-        self._pub_lane_violation = self.create_publisher(Bool, "/safety/lane_violation", 10)
-        self._pub_lane_violation_count = self.create_publisher(Int32, "/safety/lane_violation_count", 10)
-        self._pub_lane_violation_seconds = self.create_publisher(Float32, "/safety/lane_violation_seconds", 10)
+        self._pub_estop = self.create_publisher(
+            Bool, str(self.get_parameter("perception_fusion_emergency_stop_topic").value), 10
+        )
+        self._pub_speed = self.create_publisher(
+            Float32, str(self.get_parameter("perception_fusion_speed_cap_topic").value), 10
+        )
+        self._pub_steer = self.create_publisher(
+            Float32, str(self.get_parameter("perception_fusion_steering_override_topic").value), 10
+        )
+        self._pub_has_steer = self.create_publisher(
+            Bool, str(self.get_parameter("perception_fusion_has_steering_override_topic").value), 10
+        )
+        self._pub_park_complete = self.create_publisher(
+            Bool, str(self.get_parameter("perception_fusion_park_complete_topic").value), 10
+        )
+        self._pub_turn_permissions = self.create_publisher(
+            String, str(self.get_parameter("perception_fusion_turn_permissions_topic").value), 10
+        )
+        self._pub_decision_debug = self.create_publisher(
+            String, str(self.get_parameter("perception_fusion_decision_debug_topic").value), 10
+        )
+        self._pub_lane_violation = self.create_publisher(Bool, str(self.get_parameter("safety_lane_violation_topic").value), 10)
+        self._pub_lane_violation_count = self.create_publisher(
+            Int32, str(self.get_parameter("safety_lane_violation_count_topic").value), 10
+        )
+        self._pub_lane_violation_seconds = self.create_publisher(
+            Float32, str(self.get_parameter("safety_lane_violation_seconds_topic").value), 10
+        )
+        self._pub_green_elapsed = self.create_publisher(
+            Float32, str(self.get_parameter("perception_fusion_green_elapsed_s_topic").value), 10
+        )
 
         self.create_timer(0.05, self._tick)  # 20 Hz
         self.get_logger().info(
@@ -316,7 +372,14 @@ class PerceptionFusionNode(Node):
         if light_state.must_stop:
             candidates.append(Candidate(name="light", emergency_stop=True, speed_cap=0.0, reasons=[ReasonCode.LIGHT_MUST_STOP]))
         elif float(light_state.speed_cap_ratio) < 1.0:
-            candidates.append(Candidate(name="light", emergency_stop=False, speed_cap=float(light_state.speed_cap_ratio), reasons=[ReasonCode.LIGHT_YELLOW_SLOW]))
+            lr = (
+                ReasonCode.LIGHT_RED_SLOW
+                if light_state.active_color == LightColor.RED
+                else ReasonCode.LIGHT_YELLOW_SLOW
+            )
+            candidates.append(
+                Candidate(name="light", emergency_stop=False, speed_cap=float(light_state.speed_cap_ratio), reasons=[lr])
+            )
 
         if sign_state.must_stop_soon:
             candidates.append(Candidate(name="sign", emergency_stop=True, speed_cap=0.0, reasons=[ReasonCode.SIGN_MUST_STOP]))
@@ -422,6 +485,10 @@ class PerceptionFusionNode(Node):
             self._pub_lane_violation_count.publish(Int32(data=int(self._lane_violation.violation_count)))
             self._pub_lane_violation_seconds.publish(Float32(data=float(self._lane_violation.outside_accum_s)))
 
+        # Yeşil ışık geçen süre (şartname tepki süresi takibi): -1.0 = yeşil yok
+        green_elapsed = float(light_state.green_elapsed_s) if light_state.green_elapsed_s is not None else -1.0
+        self._pub_green_elapsed.publish(Float32(data=green_elapsed))
+
         if bool(self.get_parameter("publish_decision_debug").value):
             try:
                 self._pub_decision_debug.publish(
@@ -443,6 +510,7 @@ class PerceptionFusionNode(Node):
                                         "margin_m": lane.margin_m,
                                     }
                                 ),
+                                "entry_blocked": bool(sign_state.entry_blocked),
                                 "candidates": [
                                     {
                                         "name": c.name,

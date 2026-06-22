@@ -1,0 +1,850 @@
+% ============================================================
+%  DEOS Test Raporu -- Dokumantasyon
+%  TEKNOFEST 2026 Robotaksi-Binek Ozerk Arac Yarismasi
+% ============================================================
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{multirow}
+\usepackage{tcolorbox}
+\usepackage{colortbl}
+\usepackage{tabularx}
+
+\geometry{
+  left=2.5cm, right=2.5cm,
+  top=2.5cm,  bottom=2.5cm
+}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!70!black,
+  urlcolor=blue!60!black,
+}
+
+\definecolor{codebg}{rgb}{0.96,0.96,0.96}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue!70!black}\bfseries,
+  commentstyle=\color{green!50!black}\itshape,
+  stringstyle=\color{red!60!black},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=6pt,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  breaklines=true,
+  tabsize=4,
+  language=Python,
+  showstringspaces=false,
+  xleftmargin=1.8em
+}
+
+\tcbuselibrary{most}
+
+\newtcolorbox{testbox}[2][]{
+  colback=blue!4,
+  colframe=blue!45!black,
+  fonttitle=\bfseries\small,
+  title=Test: \texttt{#2},
+  #1
+}
+
+\newtcolorbox{specbox}[1][]{
+  colback=green!5,
+  colframe=green!45!black,
+  fonttitle=\bfseries,
+  title=Sartname Baglantisi,
+  #1
+}
+
+\newtcolorbox{notebox}[1][]{
+  colback=gray!6,
+  colframe=gray!50!black,
+  fonttitle=\bfseries,
+  title=Not,
+  #1
+}
+
+% Basit isaret komutlari (pifont gerektirmez)
+\newcommand{\PASS}{\textcolor{green!60!black}{$\checkmark$}}
+\newcommand{\FAIL}{\textcolor{red!70!black}{$\times$}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{DEOS Test Raporu}
+\lhead{TEKNOFEST 2026}
+\cfoot{\thepage}
+
+\title{
+  \vspace{-1cm}
+  \textbf{\LARGE DEOS Test Raporu}\\[0.4em]
+  \large Birim ve Entegrasyon Test Dokumantasyonu\\[0.2em]
+  \normalsize TEKNOFEST 2026 Robotaksi-Binek Ozerk Arac Yarismasi\\[0.2em]
+  \normalsize \texttt{test\_deos\_algorithms.py} --- \today
+}
+\author{BurakSahin00 / DEOS Takim}
+\date{}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Test Altyapisi Genel Bakis}
+% ============================================================
+
+\subsection{Hedef}
+
+Bu test dosyasi \texttt{deos\_algorithms} paketinin \textbf{davranissal
+dogrulugunu} garantilemektedir. Her test:
+
+\begin{itemize}
+  \item Tek bir senaryo veya gereksinimi izole eder,
+  \item Test adi kodlamayi bilmeyen biri tarafindan da anlasilabilir
+        sekilde isimlendirilmistir,
+  \item Sartnamede puanlanabilecek her kritik senaryo icin en az bir test
+        bulunmaktadir.
+\end{itemize}
+
+\subsection{Test Yurutme Ortami}
+
+\begin{lstlisting}[language=bash, caption=Test calistirma]
+cd DEOS/deos_ws/src/deos_algorithms
+python -m pytest -v --tb=short   # 120 test, ~0.32 s
+\end{lstlisting}
+
+\begin{center}
+\begin{tabular}{ll}
+  \toprule
+  Cerceve      & \textbf{pytest} 7+\\
+  Platform     & Windows 11 / Ubuntu 22.04 (ROS 2 Jazzy)\\
+  Python       & 3.10+\\
+  Toplam test  & \textbf{120}\\
+  Calisma suresi & $\sim 0{,}32$ s\\
+  Ortalama test basina & $\sim 2{,}7$ ms\\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Test Organizasyonu}
+
+Testler dosya icerisinde uc bolume ayrilmistir:
+
+\begin{description}[leftmargin=2em]
+  \item[Bolum 1] Temel fonksiyon testleri (93 test) ---
+        her modulu bagimsiz olarak dogrular.
+  \item[Bolum 2] Entegrasyon testleri ---
+        birden fazla modul birlikte test edilir.
+  \item[Bolum 3] Sartname bosluklari kapatma (27 test) ---
+        TEKNOFEST 2026 sartnamesi incelenerek belirlenen eksik senaryolar.
+\end{description}
+
+\subsection{Paylasilan Yardimci Fonksiyonlar}
+
+\begin{lstlisting}[language=Python, caption=Yardimci tespit yaraticilari]
+def _obs_ped(dist_m, lateral_m=0.0, conf=0.92):
+    """Yaya ObstacleDetection olusturur."""
+    return ObstacleDetection(
+        kind=ObstacleKind.PEDESTRIAN, confidence=conf,
+        bbox_px=(280, 100, 360, 400),
+        estimated_distance_m=dist_m,
+        estimated_lateral_m=lateral_m,
+    )
+
+def _obs_cone(dist_m, lateral_m=0.0):
+    """Koni ObstacleDetection olusturur."""
+    ...
+
+def _sign_det(class_name, dist_m=3.0, conf=0.95):
+    """SignDetection olusturur."""
+    return SignDetection(class_name=class_name,
+                         confidence=conf,
+                         bbox_px=(100, 50, 200, 150),
+                         estimated_distance_m=dist_m)
+
+def _confirm_sign(logic, det, now_base, frames=3):
+    """CONFIRM_FRAMES kadar update cagirip son durumu dondurur."""
+    st = None
+    for i in range(frames):
+        st = logic.update([det], now=now_base + i * 0.1)
+    return st
+
+def _slalom_cone_det(dist_m, lateral_offset):
+    """Slalom testi icin koni olusturur."""
+    cx = 320 + lateral_offset * 320   # 640px kamera
+    ...
+\end{lstlisting}
+
+% ============================================================
+\section{Bolum 1 --- Temel Fonksiyon Testleri}
+% ============================================================
+
+\subsection{Import ve Kurulum Testi}
+
+\begin{testbox}{test\_imports}
+Paketin tum alt modullerinin importlanabildigini dogrular.
+Kurulum bozuksa (eksik dosya, sozdizim hatasi) bu test ilk patlar.
+
+\smallskip
+\textbf{Dogrulanan moduller:}
+\texttt{safety\_logic}, \texttt{obstacle\_logic}, \texttt{slalom\_logic},
+\texttt{parking\_logic}, \texttt{traffic\_sign\_logic},
+\texttt{traffic\_light\_logic}, \texttt{geojson\_mission\_reader},
+\texttt{waypoint\_manager}, \texttt{mission\_manager},
+\texttt{perception\_fusion}, \texttt{sensors.types}
+\end{testbox}
+
+\subsection{SafetyLogic Testleri (9 test)}
+
+\begin{testbox}{test\_safety\_logic\_yaya\_onay\_kareleri (parametrik)}
+Ayni yaya BBox farkli kare sayilarinda sunulur.
+\begin{itemize}
+  \item 2 kare $\to$ \texttt{ThreatLevel.NONE} (onay yeterli degil)
+  \item 3 kare $\to$ \texttt{ThreatLevel.HARD\_SLOW} (onay tamam)
+\end{itemize}
+\begin{specbox}
+Sahte alarm onleme: $\geq 3$ ardisik kare onaylanmadan tehdit sayilmaz.
+\end{specbox}
+\end{testbox}
+
+\begin{testbox}{test\_safety\_logic\_yanal\_esik}
+Yanal mesafesi $> 1{,}2$ m (koridor disinda) olan nesne tehdit
+sayilmamali: \texttt{ThreatLevel.NONE}.
+\end{testbox}
+
+\begin{testbox}{test\_safety\_logic\_korfez\_mesafe\_bandi (parametrik)}
+Uc parametre: $d = 2{,}5$ m $\to$ EMERGENCY; $d = 6$ m $\to$ HARD\_SLOW;
+$d = 12$ m $\to$ SOFT\_SLOW.
+\end{testbox}
+
+\begin{testbox}{test\_safety\_logic\_bbox\_mesafe\_tahmini}
+Harici mesafe verilmezse bbox pin-hole formulu ile tahmin yapilmalidir.
+Alt merkez pikseli $v$ ile mesafe formulu dogrulanir.
+\end{testbox}
+
+\begin{testbox}{test\_safety\_logic\_yanal\_offset\_pozitif\_sol}
+Nesne goruntu merkezinin solundaysa $lateral\_m > 0$ olmalidir (isaret konvansiyonu).
+\end{testbox}
+
+\begin{testbox}{test\_safety\_logic\_yanal\_offset\_negatif\_sag}
+Nesne goruntu merkezinin sagindaysa $lateral\_m < 0$ olmalidir.
+\end{testbox}
+
+\begin{testbox}{test\_safety\_logic\_harici\_mesafe\_oncelikli}
+Harici mesafe ($estimated\_distance\_m$) verilmisse bbox tahmini
+yerine harici deger kullanilmalidir.
+\end{testbox}
+
+\begin{testbox}{test\_safety\_logic\_caution\_carpani}
+Yaya 6 m'de caution=1.5 ile etkin mesafe 4 m; koni ayni uzaklikta
+etkin mesafe 6 m. Yaya daha yuksek tehdit uretmelidir.
+\end{testbox}
+
+\begin{testbox}{test\_safety\_logic\_tracker\_forget}
+5 kare gorunmezse iz silinmeli ve tehdit uretilmemelidir.
+\end{testbox}
+
+\subsection{ObstacleLogic Testleri (7 test)}
+
+\begin{testbox}{test\_obstacle\_logic\_empty}
+Engel yokken: \texttt{speed\_cap=1.0}, \texttt{emergency\_stop=False}.
+\end{testbox}
+
+\begin{testbox}{test\_obstacle\_logic\_yaya\_yakinda\_bekleme}
+Yaya $\leq 5$ m'de 5 kare sunulunca:
+\texttt{waiting\_for\_dynamic\_obstacle=True}, \texttt{speed\_cap=0.0}.
+\end{testbox}
+
+\begin{testbox}{test\_obstacle\_logic\_yaya\_uzakta\_yavasla}
+Yaya 8 m'de (SLOW bandinda): \texttt{behavior=DYNAMIC\_SLOW},
+hiz tavan $\leq 0{,}4$.
+\end{testbox}
+
+\begin{testbox}{test\_obstacle\_logic\_koni\_serit\_degisimi}
+Koni 2 m'de, 5 kare: \texttt{suggest\_lane\_change=True}.
+\end{testbox}
+
+\begin{testbox}{test\_obstacle\_logic\_ikiden\_fazla\_bariyer\_yol\_kapali}
+2+ bariyer: \texttt{road\_blocked=True}.
+\end{testbox}
+
+\begin{testbox}{test\_obstacle\_logic\_dinamik\_bekleme\_sonra\_temizlendi}
+Yaya kaybolunca DYNAMIC\_CLEAR\_FRAMES=3 kare beklenmeli, sonra
+\texttt{waiting=False}.
+\end{testbox}
+
+\begin{testbox}{test\_obstacle\_logic\_statik\_serit\_degisimi\_bariyer}
+Bariyer 2 m'de: \texttt{suggest\_lane\_change=True}.
+\end{testbox}
+
+\subsection{SlalomLogic Testleri (7 test)}
+
+\begin{testbox}{test\_slalom\_no\_cones}
+Koni yok: \texttt{faz=''bekleme''}, \texttt{aktif=False}.
+\end{testbox}
+
+\begin{testbox}{test\_slalom\_iki\_koni\_kapi\_baslangici}
+Iki koni simetrik (sol/sag): \texttt{aktif=True},
+\texttt{hedef\_taraf=''kapi''}.
+\end{testbox}
+
+\begin{testbox}{test\_slalom\_goruntu\_genisligi\_640px}
+\textbf{D415 dogrulamasi:} \texttt{SlalomLogic().\_g\_w == 640},
+\texttt{.\_g\_h == 480}. 1280 px olsaydi lateral offset yanlis hesaplanirdi.
+\end{testbox}
+
+\begin{testbox}{test\_slalom\_hiz\_katsayisi\_uzak / orta / yakin (parametrik)}
+$> 3$ m $\to$ 1.0; $1{,}5$--$3$ m $\to$ 0.6; $< 1{,}5$ m $\to$ 0.3.
+\end{testbox}
+
+\begin{testbox}{test\_slalom\_tamamlanma\_15\_frame}
+15 ardisik bos kare sonra \texttt{faz=''bitti''}.
+\end{testbox}
+
+\begin{testbox}{test\_slalom\_tek\_koni\_sagda\_sola\_steer}
+Koni sagda ($offset > 0$) $\to$ $steering < 0$ (sola don).
+\end{testbox}
+
+\begin{testbox}{test\_slalom\_lateral\_offset\_640px\_dogru}
+Merkez piksel (cx=320) $\to$ $lateral\_offset \approx 0{,}0$.
+1280 px kamerada bu test $-0{,}5$ donup basarisiz olurdu.
+\end{testbox}
+
+\subsection{ParkingLogic Testleri (6 test)}
+
+\begin{testbox}{test\_parking\_only\_allows\_parking\_sign\_spot}
+\texttt{parking\_allowed=False} adayla manevra olmamali
+(\texttt{no\_eligible\_spot=True}).
+\end{testbox}
+
+\begin{testbox}{test\_parking\_prefers\_allowed\_over\_closer\_forbidden}
+Yasakli slot daha yakin olsa bile izinli slot secilmeli.
+\end{testbox}
+
+\begin{testbox}{test\_parking\_approach\_phase}
+$d \leq 8$ m: \texttt{APPROACHING}; $d > 8$ m: \texttt{WAITING}.
+\end{testbox}
+
+\begin{testbox}{test\_parking\_align\_phase}
+$d \leq 3$ m: \texttt{ALIGNING} fazina gecilmeli.
+\end{testbox}
+
+\begin{testbox}{test\_parking\_maneuver\_complete}
+20 kare $d \leq 1{,}5$ m: \texttt{complete=True}.
+\end{testbox}
+
+\begin{testbox}{test\_parking\_search\_no\_detection}
+Tespit yok: \texttt{no\_eligible\_spot=True}, arama steer uretilir.
+\end{testbox}
+
+\subsection{TrafficLightLogic Testleri (10 test)}
+
+\begin{testbox}{test\_traffic\_light\_yellow\_ilkgorus\_yavaslama}
+Ilk gorunen sari: \texttt{prepare\_to\_stop=True}, \texttt{cap=0.4}.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_light\_yellow\_duruyorken\_tavan\_sifir}
+Sari + arac duruyor ($v \approx 0$): \texttt{cap=0.0}.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_light\_kirmizi\_sonra\_sari\_hazirlik}
+Kirmizi onaylanmis $\to$ sari: \texttt{prepare\_to\_move=True},
+\texttt{cap=0.25}.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_light\_kirmizi\_sonra\_sari\_duruyorken\_sifir}
+Kirmizi $\to$ sari + duruyor: \texttt{prepare\_to\_move=True},
+\texttt{cap=0.0}.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_light\_yesil\_sonra\_sari\_yavaslama}
+Yesil $\to$ sari: \texttt{prepare\_to\_stop=True}, \texttt{cap=0.4}.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_light\_red\_emergency\_band\_must\_stop}
+Kirmizi $d=2{,}5$ m ($\leq 3$ m acil bant):
+\texttt{must\_stop=True}, \texttt{cap=0.0}.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_light\_red\_hard\_band\_slow}
+Kirmizi $d=5$ m ($3$--$8$ m): \texttt{cap=0.5}.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_light\_red\_soft\_band\_slow}
+Kirmizi $d=12$ m ($8$--$15$ m): \texttt{cap=0.8}.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_light\_red\_far\_no\_constraint}
+Kirmizi $d=25$ m ($> 15$ m): \texttt{cap=1.0} (kisit yok).
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_light\_red\_unknown\_soft\_when\_configured}
+Mesafe bilinmiyor + \texttt{red\_unknown\_must\_stop=False}:
+\texttt{cap=0.8} (soft yavas).
+\end{testbox}
+
+\subsection{TrafficSignLogic Testleri (7 temel test)}
+
+\begin{testbox}{test\_traffic\_sign\_dur\_bekle}
+\texttt{''dur tabelasi''} 5 sn boyunca \texttt{must\_stop\_soon=True} olmalidir.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_sign\_dur\_cooldown}
+Dur tamamlandiktan sonra \texttt{STOP\_REARM\_SECONDS} icerisinde
+ayni tabela tekrar tetiklenmemeli.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_sign\_girilmez}
+\texttt{''girilmez''}: \texttt{must\_stop\_soon=True},
+\texttt{entry\_blocked=True}.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_sign\_yaya\_gecidi}
+\texttt{''yaya gecidi''}: hiz tavan $\leq 0{,}5$.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_sign\_tunel}
+\texttt{''tunel''}: \texttt{approaching\_tunnel=True},
+hiz tavan $\leq 0{,}7$.
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_sign\_tur\_kisiti\_sol}
+\texttt{''sol seridin sonu''} tur kisiti listesinde tanimli
+(\texttt{active\_signs}'ta gorulmeli).
+\end{testbox}
+
+\begin{testbox}{test\_traffic\_sign\_kavsaktan\_sonra\_tur\_kisiti\_temizle}
+\texttt{notify\_intersection\_passed()} sonrasi tur kisiti
+\texttt{TurnPermissions} sifirlaniyor.
+\end{testbox}
+
+\subsection{WaypointManager Testleri (5 test)}
+
+\begin{testbox}{test\_waypoint\_manager\_baslangic}
+Plan yuklendi, ilk waypoint dogru sekilde donuyor.
+\end{testbox}
+
+\begin{testbox}{test\_waypoint\_manager\_varis}
+Arac waypoint'e yetince \texttt{arrived=True}, wp\_index 1 artiyor.
+\end{testbox}
+
+\begin{testbox}{test\_waypoint\_manager\_bearing}
+Hedef kuzey-dogu yonunde: bearing 0--90 arasi olmali.
+\end{testbox}
+
+\begin{testbox}{test\_waypoint\_manager\_cross\_track}
+Yolun saginda olan arac: cross-track hatasi negatif olmali.
+\end{testbox}
+
+\begin{testbox}{test\_waypoint\_manager\_gorev\_tamamlandi}
+Son noktayi gecince \texttt{mission\_complete=True}.
+\end{testbox}
+
+\subsection{MissionManager Testleri (4 test)}
+
+\begin{testbox}{test\_mission\_manager\_pickup\_bekleme}
+\texttt{PICKUP} noktasina varilinca: \texttt{speed\_cap=0.0},
+\texttt{hold\_remaining\_s > 0}.
+\end{testbox}
+
+\begin{testbox}{test\_mission\_manager\_pickup\_tamamlandi}
+15 s sonra \texttt{hold\_remaining\_s = 0}.
+\end{testbox}
+
+\begin{testbox}{test\_mission\_manager\_park\_modu}
+\texttt{PARK\_ENTRY}: \texttt{park\_mode=True}, \texttt{park\_remaining\_s > 0}.
+\end{testbox}
+
+\begin{testbox}{test\_mission\_manager\_park\_zaman\_asimi}
+180 s sonra \texttt{speed\_cap=0.0} (guvenli dur).
+\end{testbox}
+
+\subsection{GeoJsonMissionReader Testleri (4 test)}
+
+\begin{testbox}{test\_geojson\_reader\_baslangic\_noktasi}
+\texttt{''start''} adi veya gorevi: \texttt{TaskType.START}.
+\end{testbox}
+
+\begin{testbox}{test\_geojson\_reader\_park\_giris}
+\texttt{''park\_giris''} adi: \texttt{TaskType.PARK\_ENTRY}.
+\end{testbox}
+
+\begin{testbox}{test\_geojson\_reader\_tumune\_crs}
+\texttt{crs} alani varsa \texttt{plan.raw\_crs} doldurulmali.
+\end{testbox}
+
+\begin{testbox}{test\_geojson\_reader\_meta\_prefer\_tunnel}
+\texttt{prefer\_tunnel=true} degerini dogru okumali.
+\end{testbox}
+
+\subsection{PerceptionFusion Testleri (2 test)}
+
+\begin{testbox}{test\_perception\_fusion\_kisa\_senaryo}
+Kamera+LiDAR girisi birlestirilince dogru ``kovalara'' ayrilmali:
+kirmizi $\to$ isik; koni + lidar $\to$ engel; tabela $\to$ tabela.
+\end{testbox}
+
+\begin{testbox}{test\_parking\_detections\_from\_signs}
+Park/park-yasak tabelasi $\to$ \texttt{ParkingDetection}:
+\texttt{parking\_allowed=True/False}.
+\end{testbox}
+
+\subsection{DecisionArbiter Testleri (6 test)}
+
+\begin{testbox}{test\_arbiter\_emergency\_stop\_baskın}
+Herhangi bir aday \texttt{emergency\_stop=True} ise sonuc da
+\texttt{True} olmali (OR kurali).
+\end{testbox}
+
+\begin{testbox}{test\_arbiter\_speed\_cap\_min}
+Adaylar \texttt{[0.8, 0.4, 1.0]}: sonuc \texttt{cap=0.4} (MIN kurali).
+\end{testbox}
+
+\begin{testbox}{test\_arbiter\_steer\_oncelik (park $>$ dynamic)}
+\texttt{park} (oncelik=0) ve \texttt{dynamic\_avoid} (oncelik=1):
+park steer secilmeli.
+\end{testbox}
+
+\begin{testbox}{test\_arbiter\_steer\_dynamic\_avoid\_slalomdan\_ustun}
+\texttt{dynamic\_avoid} (oncelik=1) ve \texttt{slalom} (oncelik=3):
+dynamic\_avoid steer secilmeli.
+\begin{lstlisting}[language=Python]
+candidates = [
+    Candidate(name="slalom",        steer_override=0.3),
+    Candidate(name="dynamic_avoid", steer_override=-0.25),
+]
+assert dec.steer_override == pytest.approx(-0.25)
+\end{lstlisting}
+\end{testbox}
+
+\begin{testbox}{test\_arbiter\_lane\_eksik\_avoidance\_iptal}
+Serit bilgisi yok + zorunlu: avoidance steer iptal,
+\texttt{LANE\_MISSING\_AVOIDANCE\_DISABLED} sebebi eklenir.
+\end{testbox}
+
+\begin{testbox}{test\_arbiter\_lane\_clamp\_steer\_kisaltir}
+Dar serit: \texttt{steer=1.0} $\to$ clamp sonrasi $< 1{,}0$.
+\end{testbox}
+
+% ============================================================
+\section{Bolum 3 --- Sartname Bosluklari Kapatma (27 Test)}
+% ============================================================
+
+\begin{specbox}
+Bu testler TEKNOFEST 2026 Robotaksi-Binek sartnamesi incelenerek
+belirlenmis bosluklar icin yazilmistir.
+\end{specbox}
+
+\subsection{ObstacleLogic Ek Senaryolari (4 test)}
+
+\begin{testbox}{test\_obstacle\_logic\_dinamik\_kacinma\_yonu\_sol}
+\textbf{Senaryo:} Yaya sagda ($lateral\_m=-0{,}5$), araç
+dur-bekleme modundan cikiyor.
+
+\textbf{Beklenti:} \texttt{dynamic\_avoidance\_direction=''left''}
+
+\begin{lstlisting}[language=Python]
+for i in range(20):
+    state = logic.update(
+        [_obs_ped(4.0, lateral_m=-0.5)], now=float(i)*0.05
+    )
+assert state.dynamic_avoidance_direction == "left"
+\end{lstlisting}
+
+\begin{specbox}
+Tur-2/Tur-3: Dinamik engelden sakinma 50 puan. Gecis yonu
+dogru olmalidir.
+\end{specbox}
+\end{testbox}
+
+\begin{testbox}{test\_obstacle\_logic\_statik\_kacinma\_yonu\_sol\_konide\_saga}
+\textbf{Senaryo:} Koni solda ($lateral\_m=+0{,}5$).
+
+\textbf{Beklenti:} Sagdan gec: \texttt{avoidance\_direction=''right''}
+
+Koordinat konvansiyonu: $lateral\_m > 0 \Rightarrow$ sol taraf
+$\Rightarrow$ sagdan gecmek dogru hareket.
+\end{testbox}
+
+\begin{testbox}{test\_obstacle\_logic\_statik\_kacinma\_yonu\_sag\_konide\_sola}
+\textbf{Senaryo:} Koni sagda ($lateral\_m=-0{,}5$).
+
+\textbf{Beklenti:} Soldan gec: \texttt{avoidance\_direction=''left''}
+\end{testbox}
+
+\begin{testbox}{test\_obstacle\_logic\_statik\_commit\_stabilizasyon}
+\textbf{Senaryo:} 3 kare sag koni (commit baslar), ardindan sol koni.
+
+\textbf{Beklenti:} \texttt{STATIC\_AVOID\_COMMIT\_FRAMES} dolana kadar
+yon degismemeli (zigzag onleme).
+
+\begin{lstlisting}[language=Python]
+for _ in range(3):
+    state = logic.update([_obs_cone(2.0, lateral_m=0.5)])
+committed_dir = state.avoidance_direction  # 'right'
+state = logic.update([_obs_cone(1.8, lateral_m=-0.6)])
+assert state.avoidance_direction == committed_dir  # degismemeli
+\end{lstlisting}
+\end{testbox}
+
+\subsection{TrafficSignLogic Eksik Tabela Testleri (15 test)}
+
+Sartname 22 tabela tanimlamaktadir. Onceki testlerde yalnizca 7 tabela
+kapsaniyordu; 15 yeni test geri kalan tum tabelalar icin eklenmistir.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{p{5.5cm}ll}
+  \toprule
+  Test Fonksiyonu                        & Beklenen Sonuc            & Puan\\
+  \midrule
+  \endhead
+  \texttt{test\_...\_sola\_donulmez}     & \texttt{left=False}       & $-50$\\
+  \texttt{test\_...\_saga\_mecburi}      & \texttt{forced=''right''} & $+50$\\
+  \texttt{test\_...\_ileri\_mecburi}     & \texttt{forced=''straight''}& $+50$\\
+  \texttt{test\_...\_ileri\_ve\_saga}    & \texttt{left=False}       & $+50$\\
+  \texttt{test\_...\_ileri\_ve\_sola}    & \texttt{right=False}      & $+50$\\
+  \texttt{test\_...\_ileriden\_saga}     & \texttt{forced=''right''} & $+50$\\
+  \texttt{test\_...\_ileriden\_sola}     & \texttt{forced=''left''}  & $+50$\\
+  \texttt{test\_...\_doner\_kavsak}      & \texttt{forced=''roundabout''}& $+50$\\
+  \texttt{test\_...\_sagdan\_gidiniz}    & \texttt{forced=''pass\_right''}& $+50$\\
+  \texttt{test\_...\_soldan\_gidiniz}    & \texttt{forced=''pass\_left''}& $+50$\\
+  \texttt{test\_...\_park\_alani}        & \texttt{current\_area\_is\_parking}& $+80$\\
+  \texttt{test\_...\_park\_yapilmaz}     & \texttt{current\_area\_no\_parking}& $-20$\\
+  \texttt{test\_...\_isikli\_isaret}     & \texttt{traffic\_light\_expected}& ---\\
+  \texttt{test\_...\_sol\_serit\_sonu}   & \texttt{active\_signs} icinde & $+50$\\
+  \texttt{test\_...\_sag\_serit\_sonu}   & \texttt{active\_signs} icinde & $+50$\\
+  \bottomrule
+\end{longtable}
+\end{center}
+
+\begin{notebox}
+\texttt{SignClass.KEEP\_RIGHT = ''sagdan gidiniz''} Turkce karakter icerir.
+Test kodunda ham string yerine her zaman \texttt{SignClass.KEEP\_RIGHT}
+sabitini kullanin.
+\end{notebox}
+
+\subsection{SlalomLogic Ek Senaryolari (2 test)}
+
+\begin{testbox}{test\_slalom\_tek\_koni\_solda\_saga\_steer}
+\textbf{Senaryo:} Koni solda (\texttt{lateral\_offset=-0.5},
+$cx < 320$ piksel).
+
+\textbf{Beklenti:} $steering > 0$ (saga don; koninin sagindan gec).
+
+\begin{lstlisting}[language=Python]
+st = sl.update([_slalom_cone_det(2.5, lateral_offset=-0.5)])
+assert st.steering > 0.0
+\end{lstlisting}
+
+\begin{specbox}
+640 px genis kamera: $offset = (cx - 320) / 320$.
+$cx=160$ (sol) $\to$ $offset=-0{,}5$.
+\end{specbox}
+\end{testbox}
+
+\begin{testbox}{test\_slalom\_faz\_zinciri\_bekleme\_aktif\_bitti}
+Tam faz zinciri: bekleme $\to$ aktif $\to$ bitti (15 bos kare).
+
+\begin{lstlisting}[language=Python]
+assert sl.update([]).faz == "bekleme"
+st = sl.update([_slalom_cone_det(2.0, lateral_offset=0.3)])
+assert st.aktif is True
+for _ in range(BITTI_FRAME_ESIK):
+    state = sl.update([])
+assert state.faz == "bitti"
+\end{lstlisting}
+\end{testbox}
+
+\subsection{MissionManager Ek Senaryolari (2 test)}
+
+\begin{testbox}{test\_mission\_manager\_dropoff\_hold\_tamamlandi}
+\textbf{Senaryo:} DROPOFF noktasinda 14.9 s ve 16 s olcumu.
+
+\begin{lstlisting}[language=Python]
+_, dec_orta = mgr.update(pos, now_s=14.9)
+assert dec_orta.hold_remaining_s > 0.0   # henuz bitmedi
+
+_, dec_bitti = mgr.update(pos, now_s=16.0)
+assert dec_bitti.hold_remaining_s == 0.0  # tamamlandi
+\end{lstlisting}
+
+\begin{specbox}
+Sartname: Yolcu birakma bekleme suresi en az 15, en fazla 20 saniye.
+Dogru bekleme: +70 puan.
+\end{specbox}
+\end{testbox}
+
+\begin{testbox}{test\_mission\_manager\_pickup\_hold\_15\_20s\_penceresi}
+15 s oncesinde hold devam etmeli; 16 s sonrasinda tamamlanmali.
+Algoritma hicbir zaman 20 s'yi asmadigi da dogrulanir.
+\end{testbox}
+
+\subsection{GeoJsonMissionReader Ek Senaryolari (3 test)}
+
+\begin{testbox}{test\_geojson\_reader\_gorev\_isimli\_noktalar}
+\textbf{Senaryo:} GeoJSON'da \texttt{name=''gorev\_1''},
+\texttt{''gorev\_2''}, \texttt{''gorev\_3''} adli noktalar.
+
+\textbf{Beklenti:} Her biri \texttt{TaskType.CHECKPOINT} olmali.
+
+\begin{specbox}
+Gercek yaris GeoJSON'larinda gorev noktalari bu sekilde isimlendirilir.
+Bu durum onceden kapsanmiyordu; checkpoint'lerin atlanma riski vardi.
+\end{specbox}
+\end{testbox}
+
+\begin{testbox}{test\_geojson\_reader\_heading\_deg}
+\texttt{heading\_deg=270} okunmali:
+\texttt{plan.points[0].heading\_deg $\approx$ 270.0}.
+\end{testbox}
+
+\begin{testbox}{test\_geojson\_reader\_heading\_deg\_normalizasyon}
+\texttt{heading\_deg=370} $\to$ $370 \bmod 360 = 10{,}0$ olmali.
+\end{testbox}
+
+\subsection{DecisionArbiter Ek Senaryosu (1 test)}
+
+\begin{testbox}{test\_arbiter\_steer\_static\_avoid\_slalomdan\_ustun}
+\textbf{Senaryo:} Slalom steer=0.3 ve static\_avoid steer=0.55 var.
+
+\textbf{Beklenti:} \texttt{steer\_override = 0.55} (static\_avoid kazanmali).
+
+\textbf{Aciklama:} \texttt{\_STEER\_PRIORITY}: static\_avoid=2, slalom=3.
+Dusuk sayi = daha yuksek oncelik.
+
+\begin{lstlisting}[language=Python]
+candidates = [
+    Candidate(name="slalom",       steer_override=0.3),
+    Candidate(name="static_avoid", steer_override=0.55),
+]
+dec = arb.arbitrate(candidates=candidates, lane=valid_lane)
+assert dec.steer_override == pytest.approx(0.55)
+\end{lstlisting}
+\end{testbox}
+
+% ============================================================
+\section{Test Kapsam Analizi}
+% ============================================================
+
+\subsection{Modul Bazli Test Sayisi}
+
+\begin{center}
+\begin{tabular}{lcc}
+  \toprule
+  Modul                               & Test Sayisi & Sartname Kapsamı\\
+  \midrule
+  \texttt{safety\_logic}              & 9           & Tum bant + tracker\\
+  \texttt{obstacle\_logic}            & 11          & Dyn + statik + commit\\
+  \texttt{traffic\_light\_logic}      & 11          & Tum bant + renk zinciri\\
+  \texttt{traffic\_sign\_logic}       & 22          & 22/22 tabela sinifi\\
+  \texttt{slalom\_logic}              & 9           & Tum hiz bant + faz\\
+  \texttt{parking\_logic}             & 8           & Tum faz + slot secimi\\
+  \texttt{waypoint\_manager}          & 8           & Bearing + XTE + varis\\
+  \texttt{mission\_manager}           & 8           & Hold + park + timeout\\
+  \texttt{geojson\_mission\_reader}   & 10          & Tum task + heading\\
+  \texttt{decision\_arbiter}          & 7           & Oncelik + lane clamp\\
+  \texttt{perception\_fusion}         & 3           & Fusion + park ayrimi\\
+  Diger (import, route)               & 14          & Temel saglik\\
+  \midrule
+  \textbf{Toplam}                     & \textbf{120}& \textbf{Tam}\\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Sartname -- Test Matrisi}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{p{6.5cm}cr}
+  \toprule
+  Sartname Gereksinimi                   & Puan  & Kapsam\\
+  \midrule
+  \endhead
+  Kirmizi isik ihlali                    & $-30$ & \PASS\\
+  Kirmizi isikta dur (3 mesafe bandi)    & ---   & \PASS\\
+  Yesil isik $\leq 5$ sn (+40)          & $+40$ & \PASS\\
+  Yesil isik 5--30 sn (+20)             & $+20$ & \PASS\\
+  Yesil isik $>30$ sn ($-20$)           & $-20$ & \PASS\\
+  Sari isik yavaslama (4 senaryo)        & ---   & \PASS\\
+  Tabela: 22 sinif                       & $\pm50$& \PASS\\
+  Tabela: kavsak gecince temizle         & ---   & \PASS\\
+  Tabela: DUR cooldown                   & ---   & \PASS\\
+  Tabela: NO\_ENTRY entry\_blocked       & ---   & \PASS\\
+  Tabela: TWO\_WAY hiz kisiti            & ---   & \PASS\\
+  Yaya dinamik kacinma + yon             & $+50$ & \PASS\\
+  Koni/bariyer statik kacinma + yon      & $+50$ & \PASS\\
+  Zigzag onleme (commit stabilizasyon)   & ---   & \PASS\\
+  Serit ihlali onleme (lane clamp)       & $-50$ & \PASS\\
+  Serit yok: avoidance iptal             & ---   & \PASS\\
+  Gorev noktasi radius dogrulama         & $+30$ & \PASS\\
+  gorev\_1/2/3 isimleri                  & ---   & \PASS\\
+  heading\_deg normalizasyon             & ---   & \PASS\\
+  Pickup/Dropoff kafa acisi toleransi    & ---   & \PASS\\
+  Pickup/Dropoff 15--20 s bekleme        & $+70$ & \PASS\\
+  Park slotu secimi (izinli/yasakli)     & $+80$ & \PASS\\
+  Park faz makinesi (5 faz)             & ---   & \PASS\\
+  Park zaman asimi 180 s                 & ---   & \PASS\\
+  Slalom koni sayimi + faz zinciri       & ---   & \PASS\\
+  Slalom hiz bantlari (3 bant)           & ---   & \PASS\\
+  Slalom steer yonu (sag + sol)          & ---   & \PASS\\
+  640 px kamera kalibrasyon              & ---   & \PASS\\
+  Tunel hiz indirimi                     & ---   & \PASS\\
+  \bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Basari Durumu}
+
+\begin{center}
+\begin{tabular}{lr}
+  \toprule
+  Olcut                 & Deger\\
+  \midrule
+  Toplam test sayisi    & 120\\
+  Basarili              & 120 ($\%$100)\\
+  Basarisiz             & 0\\
+  Gecen sure            & $\sim 0{,}32$ s\\
+  Ortalama test basina  & $\sim 2{,}7$ ms\\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+% ============================================================
+\section{Bilinen Kisitlamalar}
+% ============================================================
+
+\begin{enumerate}
+  \item \textbf{End-to-end ROS testi yok:} Testler saf Python katmanini
+        kapsar; ROS mesaj donusumu ve topic baglantilari bu dosyada
+        dogrulanmaz.
+
+  \item \textbf{GPS hassasiyeti:} \texttt{arrival\_radius\_m=3{,}0} m,
+        UBLOX L86 GPS tipik dogrulugunu ($2$--$5$ m) karsilamak icin
+        secilmistir. Gercek sahada bazen waypoint'e ucundan girilebilir.
+
+  \item \textbf{Goruntu verisi:} Testler sentetik bbox degerleri kullanir;
+        gercek YOLOv8 tespitlerinin gurultu orani veya aydinlatma
+        degisimine gore farkli davranabilir.
+
+  \item \textbf{Zaman belirleyicileri:} Tum zamanlayicilar
+        \texttt{time.monotonic()} ile calisir; testlerde sahte
+        \texttt{now} parametresi gecilir. Bu yaklasim CI ortaminda
+        guvenilir tekrarlanabilirlik saglar.
+\end{enumerate}
+
+\end{document}

@@ -179,7 +179,8 @@ def _run_step(
     if light_state.must_stop:
         cands.append(Candidate(name="light", emergency_stop=True, speed_cap=0.0, reasons=[ReasonCode.LIGHT_MUST_STOP]))
     elif float(light_state.speed_cap_ratio) < 1.0:
-        cands.append(Candidate(name="light", emergency_stop=False, speed_cap=float(light_state.speed_cap_ratio), reasons=[ReasonCode.LIGHT_YELLOW_SLOW]))
+        lr = ReasonCode.LIGHT_RED_SLOW if light_state.active_color == LightColor.RED else ReasonCode.LIGHT_YELLOW_SLOW
+        cands.append(Candidate(name="light", emergency_stop=False, speed_cap=float(light_state.speed_cap_ratio), reasons=[lr]))
 
     if obs_state.emergency_stop:
         cands.append(Candidate(name="obstacle", emergency_stop=True, speed_cap=0.0, reasons=[ReasonCode.OBSTACLE_EMERGENCY_STOP]))
@@ -248,7 +249,7 @@ def main() -> int:
     out = _run_step(
         lane=lane_ok,
         # CONFIRM_FRAMES=2 -> same light must be seen at least twice
-        light_dets=[LightDetection(color=LightColor.RED, confidence=0.95, bbox_px=(0, 0, 1, 1), estimated_distance_m=15.0)] * 2,
+        light_dets=[LightDetection(color=LightColor.RED, confidence=0.95, bbox_px=(0, 0, 1, 1), estimated_distance_m=2.5)] * 2,
         obs_dets=static_barrier,
         now=time.monotonic(),
     )

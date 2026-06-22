@@ -18,7 +18,7 @@ _pkg_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_pkg_root))
 
 from deos_algorithms.decision_arbiter import Candidate, DecisionArbiter, LaneBounds, ReasonCode
-from deos_algorithms.obstacle_logic import ObstacleDetection, ObstacleLogic
+from deos_algorithms.obstacle_logic import DYNAMIC_AVOID_HOLD_S, ObstacleDetection, ObstacleLogic
 
 
 def _print_output_key_legend() -> None:
@@ -79,10 +79,12 @@ def _run(ped_lat_m: float, lane: LaneBounds | None) -> dict:
         )
     ]
 
-    # Confirm + wait + pass hold ticks to allow dynamic_avoid_active
+    # Confirm + wait + pass hold ticks to allow dynamic_avoid_active.
+    # Use synthetic time so DYNAMIC_AVOID_HOLD_S elapses deterministically.
+    t0 = 1000.0
     st = None
-    for _ in range(25):
-        st = obs.update(dets)
+    for i in range(25):
+        st = obs.update(dets, now=t0 + i * (DYNAMIC_AVOID_HOLD_S / 10.0))
     assert st is not None
 
     cands: list[Candidate] = []

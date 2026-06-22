@@ -122,7 +122,10 @@ def _arbiter_from_logic(
     if light_state.must_stop:
         candidates.append(Candidate(name="light", emergency_stop=True, speed_cap=0.0, reasons=[ReasonCode.LIGHT_MUST_STOP]))
     elif float(light_state.speed_cap_ratio) < 1.0:
-        candidates.append(Candidate(name="light", speed_cap=float(light_state.speed_cap_ratio), reasons=[ReasonCode.LIGHT_YELLOW_SLOW]))
+        lr = ReasonCode.LIGHT_RED_SLOW if light_state.active_color == LightColor.RED else ReasonCode.LIGHT_YELLOW_SLOW
+        candidates.append(
+            Candidate(name="light", emergency_stop=False, speed_cap=float(light_state.speed_cap_ratio), reasons=[lr])
+        )
 
     if sign_state.must_stop_soon:
         candidates.append(Candidate(name="sign", emergency_stop=True, speed_cap=0.0, reasons=[ReasonCode.SIGN_MUST_STOP]))
@@ -239,7 +242,7 @@ def main() -> None:
         sign_dets: list[SignDetection] = []
         if with_lights_signs:
             # Kırmızı: dur
-            light_dets = [LightDetection(color=LightColor.RED, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=10.0)] * 2
+            light_dets = [LightDetection(color=LightColor.RED, confidence=0.9, bbox_px=(0, 0, 1, 1), estimated_distance_m=2.5)] * 2
             decision, _ = _arbiter_from_logic(
                 light=TrafficLightLogic(),
                 sign=TrafficSignLogic(),

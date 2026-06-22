@@ -520,8 +520,8 @@ def main() -> None:
     passed += case(
         algo="Trafik ışığı (TrafficLightLogic)",
         name="TR: KIRMIZI — dur (must_stop)",
-        desc="Kırmızı ışık 2 kare doğrulanınca must_stop=True ve speed_cap_ratio=0.0 beklenir.",
-        run=lambda: run_light_confirmed(LightColor.RED, distance_m=15.0),
+        desc="Kırmızı ışık acil mesafe bandında (<=3 m) 2 kare doğrulanınca must_stop=True ve speed_cap_ratio=0.0 beklenir.",
+        run=lambda: run_light_confirmed(LightColor.RED, distance_m=2.5),
         expect={"must_stop": True, "speed_cap_ratio": 0.0, "active_color": LightColor.RED},
         show_keys=["must_stop", "speed_cap_ratio", "active_color", "reason"],
     )

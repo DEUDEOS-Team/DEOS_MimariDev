@@ -11,6 +11,7 @@ from std_msgs.msg import Bool, Float32, String
 from deos_algorithms.geojson_mission_reader import GeoJsonMissionReader
 from deos_algorithms.mission_manager import MissionManager
 from deos_algorithms.route_graph import build_graph_from_centerlines_geojson, load_centerlines_geojson, nearest_node_id
+from deos_algorithms.ros_topic_layout import build_deos_topics
 from deos_algorithms.route_planner import (
     advance_mission_index_by_position,
     route_remaining_mission_via_graph,
@@ -53,6 +54,9 @@ class MissionPlanningNode(Node):
     def __init__(self):
         super().__init__("mission_planning_node")
 
+        self.declare_parameter("deos_root", "/deos")
+        _T = build_deos_topics(str(self.get_parameter("deos_root").value))
+
         self.declare_parameter("mission_file", "")
         self.declare_parameter("centerlines_file", "")
         self.declare_parameter("centerlines_round_decimals", 7)
@@ -62,11 +66,22 @@ class MissionPlanningNode(Node):
         self.declare_parameter("mission_only_keep_park_last", True)
         # UMS-2 Go: araç göreve başlamadan önce onay bekle
         self.declare_parameter("require_go_signal", True)
-        self.declare_parameter("go_topic", "/hardware/motion_enable")
+        self.declare_parameter("go_topic", _T["hardware_motion_enable"])
         self.declare_parameter("heading_offset_deg", 0.0)
-        # Ek mimari uyumu: heading kaynağı opsiyonel olarak /final_odom'dan alınabilir
-        self.declare_parameter("heading_source", "imu")  # "imu" | "final_odom"
-        self.declare_parameter("final_odom_topic", "/final_odom")
+        # Ek mimari uyumu: heading kaynağı opsiyonel olarak final_odom'dan alınabilir
+        self.declare_parameter("heading_source", "final_odom")  # "final_odom" tercih (KISS-ICP+EKF); "imu" sadece odometri yoksa
+        self.declare_parameter("final_odom_topic", _T["localization_odom_final"])
+        self.declare_parameter("gps_fix_topic", _T["sensors_gps_fix"])
+        self.declare_parameter("imu_topic", _T["sensors_imu"])
+        self.declare_parameter("perception_turn_permissions_topic", _T["perception_fusion_turn_permissions"])
+        self.declare_parameter("perception_decision_debug_topic", _T["perception_fusion_decision_debug"])
+        self.declare_parameter("perception_park_complete_topic", _T["perception_fusion_park_complete"])
+        self.declare_parameter("planning_steering_topic", _T["planning_steering_ref"])
+        self.declare_parameter("planning_speed_topic", _T["planning_speed_limit"])
+        self.declare_parameter("planning_current_task_topic", _T["planning_current_task"])
+        self.declare_parameter("planning_arrived_topic", _T["planning_arrived"])
+        self.declare_parameter("planning_park_mode_topic", _T["planning_park_mode"])
+        self.declare_parameter("planning_park_remaining_topic", _T["planning_park_remaining_s"])
 
         mission_file = str(self.get_parameter("mission_file").value)
         centerlines_file = str(self.get_parameter("centerlines_file").value)
@@ -104,6 +119,7 @@ class MissionPlanningNode(Node):
         # Routing: Mission noktalarını graph'a snap edip Dijkstra ile bir route waypoint listesi üret.
         self._blocked_edges: set[tuple[int, int]] = set()
         self._road_blocked: bool = False
+        self._entry_blocked: bool = False
         self._mission_idx: int = 0  # base_plan hedef indeksi (replan için)
         self._last_turn_replan_sig: str = ""
         self._last_turn_replan_t: float = 0.0
@@ -144,22 +160,30 @@ class MissionPlanningNode(Node):
         self._last_task = ""
         self._turn_perm: dict | None = None
 
-        self.create_subscription(NavSatFix, "/gps/fix", self._gps_cb, 10)
-        self.create_subscription(Imu, "/imu/data", self._imu_cb, 10)
+        self.create_subscription(NavSatFix, str(self.get_parameter("gps_fix_topic").value), self._gps_cb, 10)
+        self.create_subscription(Imu, str(self.get_parameter("imu_topic").value), self._imu_cb, 10)
         self.create_subscription(Odometry, str(self.get_parameter("final_odom_topic").value), self._final_odom_cb, 10)
-        self.create_subscription(String, "/perception/turn_permissions", self._turn_perm_cb, 10)
-        self.create_subscription(String, "/perception/decision_debug", self._decision_debug_cb, 10)
+        self.create_subscription(
+            String, str(self.get_parameter("perception_turn_permissions_topic").value), self._turn_perm_cb, 10
+        )
+        self.create_subscription(
+            String, str(self.get_parameter("perception_decision_debug_topic").value), self._decision_debug_cb, 10
+        )
         self.create_subscription(Bool, str(self.get_parameter("go_topic").value), self._go_cb, 10)
 
-        self._pub_steer = self.create_publisher(Float32, "/planning/steering_ref", 10)
-        self._pub_speed = self.create_publisher(Float32, "/planning/speed_limit", 10)
-        self._pub_task = self.create_publisher(String, "/planning/current_task", 10)
-        self._pub_arrived = self.create_publisher(Bool, "/planning/arrived", 10)
-        self._pub_park_mode = self.create_publisher(Bool, "/planning/park_mode", 10)
-        self._pub_park_remaining = self.create_publisher(Float32, "/planning/park_remaining_s", 10)
+        self._pub_steer = self.create_publisher(Float32, str(self.get_parameter("planning_steering_topic").value), 10)
+        self._pub_speed = self.create_publisher(Float32, str(self.get_parameter("planning_speed_topic").value), 10)
+        self._pub_task = self.create_publisher(String, str(self.get_parameter("planning_current_task_topic").value), 10)
+        self._pub_arrived = self.create_publisher(Bool, str(self.get_parameter("planning_arrived_topic").value), 10)
+        self._pub_park_mode = self.create_publisher(Bool, str(self.get_parameter("planning_park_mode_topic").value), 10)
+        self._pub_park_remaining = self.create_publisher(
+            Float32, str(self.get_parameter("planning_park_remaining_topic").value), 10
+        )
 
         # Park tamamlandı sinyali (perception) — park girişinden sonra 3dk içinde park etmek için
-        self.create_subscription(Bool, "/perception/park_complete", self._park_complete_cb, 10)
+        self.create_subscription(
+            Bool, str(self.get_parameter("perception_park_complete_topic").value), self._park_complete_cb, 10
+        )
 
         self.create_timer(0.2, self._tick_timeout)  # 5 Hz
 
@@ -244,14 +268,15 @@ class MissionPlanningNode(Node):
             self._turn_perm = None
 
     def _decision_debug_cb(self, msg: String) -> None:
-        # decision_debug JSON: {final: {...}, candidates: [...], reasons:[...]} (perception_fusion_node)
+        # decision_debug JSON: {final: {...}, candidates: [...], entry_blocked: bool, ...}
         try:
             d = json.loads(msg.data) if msg.data else {}
             reasons = d.get("final", {}).get("reasons") or d.get("reasons") or []
-            # ReasonCode values are strings like "road_blocked"
             self._road_blocked = any(str(r) == "road_blocked" for r in reasons)
+            self._entry_blocked = bool(d.get("entry_blocked", False))
         except Exception:
             self._road_blocked = False
+            self._entry_blocked = False
 
     def _apply_turn_permissions(self, steer: float, dist_to_wp_m: float) -> tuple[float, float]:
         """
@@ -346,6 +371,7 @@ class MissionPlanningNode(Node):
             and not bool(mission_dec.park_mode)
             and (
                 self._road_blocked
+                or self._entry_blocked
                 or (self._turn_perm is not None and float(wp_state.distance_to_wp_m) <= TURN_RULE_APPLY_DISTANCE_M)
             )
         )
@@ -386,6 +412,7 @@ class MissionPlanningNode(Node):
                 if new_plan.points:
                     self._manager = MissionManager(new_plan)
                     self._road_blocked = False
+                    self._entry_blocked = False
                     self._last_turn_replan_sig = sig
                     self._last_turn_replan_t = now_m
                     wp_state, mission_dec = self._manager.update(pos, now_s=time.monotonic())

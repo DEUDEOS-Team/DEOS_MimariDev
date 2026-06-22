@@ -4,6 +4,8 @@ import rclpy
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 
+from deos_algorithms.ros_topic_layout import build_deos_topics
+
 
 class FinalOdomNode(Node):
     """
@@ -15,9 +17,11 @@ class FinalOdomNode(Node):
 
     def __init__(self):
         super().__init__("final_odom_node")
-        self.declare_parameter("ekf_odom_topic", "/odom")
-        self.declare_parameter("icp_odom_topic", "/odometry/icp")
-        self.declare_parameter("out_topic", "/final_odom")
+        self.declare_parameter("deos_root", "/deos")
+        _T = build_deos_topics(str(self.get_parameter("deos_root").value))
+        self.declare_parameter("ekf_odom_topic", _T["localization_odom_ekf"])
+        self.declare_parameter("icp_odom_topic", _T["localization_odom_icp"])
+        self.declare_parameter("out_topic", _T["localization_odom_final"])
         self.declare_parameter("icp_timeout_s", 0.2)
 
         self._ekf: Odometry | None = None

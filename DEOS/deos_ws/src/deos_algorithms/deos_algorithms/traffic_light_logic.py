@@ -14,6 +14,12 @@ from dataclasses import dataclass
 from typing import Optional
 import time
 
+from deos_algorithms.safety_logic import (
+    DIST_EMERGENCY_STOP,
+    DIST_HARD_SLOWDOWN,
+    DIST_SOFT_SLOWDOWN,
+)
+
 
 class LightColor:
     RED = "red"
@@ -82,6 +88,8 @@ class TrafficLightState:
     speed_cap_ratio: float = 1.0
     active_color: Optional[str] = None
     last_distance_m: Optional[float] = None
+    # Şartname: yeşil ışıkta ≤5sn=+40p, 5-30sn=+20p, >30sn=-20p
+    green_elapsed_s: Optional[float] = None
     reason: str = ""
 
 
@@ -96,10 +104,33 @@ class _LightMemory:
 
 
 class TrafficLightLogic:
-    def __init__(self):
+    """
+    Kırmızı ışık mesafe bantları, ``safety_logic`` ile aynı eşiklerde tutulur (şartname tablosu ile uyum):
+    ``<= DIST_EMERGENCY_STOP`` tam dur; üst bantlarda yalnızca hız tavanı; ``> DIST_SOFT_SLOWDOWN`` müdahale yok.
+    """
+
+    def __init__(
+        self,
+        *,
+        red_emergency_m: float = DIST_EMERGENCY_STOP,
+        red_hard_m: float = DIST_HARD_SLOWDOWN,
+        red_soft_m: float = DIST_SOFT_SLOWDOWN,
+        red_hard_speed_ratio: float = 0.5,
+        red_soft_speed_ratio: float = 0.8,
+        red_unknown_must_stop: bool = True,
+    ) -> None:
+        self._red_emergency_m = float(red_emergency_m)
+        self._red_hard_m = float(red_hard_m)
+        self._red_soft_m = float(red_soft_m)
+        self._red_hard_speed_ratio = float(red_hard_speed_ratio)
+        self._red_soft_speed_ratio = float(red_soft_speed_ratio)
+        self._red_unknown_must_stop = bool(red_unknown_must_stop)
+
         self._memories: dict[str, _LightMemory] = {}
         # Son üretilen kararda kırmızı/yeşil hangisi baskındı (sarı bağlamı için)
         self._last_non_yellow: Optional[str] = None
+        # Yeşil ışığın ilk onaylandığı an (şartname tepki süresi takibi için)
+        self._green_started_at: Optional[float] = None
 
     def update(
         self,
@@ -108,16 +139,25 @@ class TrafficLightLogic:
         vehicle_speed_mps: Optional[float] = None,
     ) -> TrafficLightState:
         if now is None:
-            now = time.time()
+            now = time.monotonic()
         detections = [d for d in detections if d.confidence >= MIN_CONFIDENCE]
         self._update_memory(detections, now)
         self._forget_expired(now)
         active = [m for m in self._memories.values() if m.confirmed]
-        return self._decide(active, vehicle_speed_mps=vehicle_speed_mps)
+
+        active_colors = {m.color for m in active}
+        if LightColor.GREEN in active_colors:
+            if self._green_started_at is None:
+                self._green_started_at = now
+        else:
+            self._green_started_at = None
+
+        return self._decide(active, vehicle_speed_mps=vehicle_speed_mps, now=now)
 
     def reset(self) -> None:
         self._memories.clear()
         self._last_non_yellow = None
+        self._green_started_at = None
 
     def _update_memory(self, detections: list[LightDetection], now: float) -> None:
         for det in detections:
@@ -158,7 +198,7 @@ class TrafficLightLogic:
             return False
         return abs(float(vehicle_speed_mps)) <= STATIONARY_SPEED_EPS_MPS
 
-    def _decide(self, active: list[_LightMemory], vehicle_speed_mps: Optional[float] = None) -> TrafficLightState:
+    def _decide(self, active: list[_LightMemory], vehicle_speed_mps: Optional[float] = None, now: float = 0.0) -> TrafficLightState:
         state = TrafficLightState()
         if not active:
             return state
@@ -176,13 +216,42 @@ class TrafficLightLogic:
 
         if LightColor.RED in by_color:
             mem = by_color[LightColor.RED]
-            state.must_stop = True
-            state.speed_cap_ratio = 0.0
             state.active_color = LightColor.RED
             state.last_distance_m = mem.last_distance_m
             self._last_non_yellow = LightColor.RED
-            dist_txt = f"{mem.last_distance_m:.1f}m" if mem.last_distance_m is not None else "?"
-            state.reason = f"RED light at {dist_txt}"
+            dist = mem.last_distance_m
+
+            if dist is None:
+                if self._red_unknown_must_stop:
+                    state.must_stop = True
+                    state.speed_cap_ratio = 0.0
+                    state.reason = "RED light distance unknown -> must_stop (conservative)"
+                else:
+                    state.must_stop = False
+                    state.speed_cap_ratio = float(self._red_soft_speed_ratio)
+                    state.reason = "RED light distance unknown -> soft slow"
+                return state
+
+            d = float(dist)
+            if d <= self._red_emergency_m:
+                state.must_stop = True
+                state.speed_cap_ratio = 0.0
+                state.reason = f"RED light emergency band (d<={self._red_emergency_m:.1f}m) at {d:.1f}m"
+                return state
+            if d <= self._red_hard_m:
+                state.must_stop = False
+                state.speed_cap_ratio = float(self._red_hard_speed_ratio)
+                state.reason = f"RED light hard slow ({self._red_emergency_m:.1f}m<d<={self._red_hard_m:.1f}m) at {d:.1f}m"
+                return state
+            if d <= self._red_soft_m:
+                state.must_stop = False
+                state.speed_cap_ratio = float(self._red_soft_speed_ratio)
+                state.reason = f"RED light soft slow ({self._red_hard_m:.1f}m<d<={self._red_soft_m:.1f}m) at {d:.1f}m"
+                return state
+
+            state.must_stop = False
+            state.speed_cap_ratio = 1.0
+            state.reason = f"RED light far (d>{self._red_soft_m:.1f}m) ignored at {d:.1f}m"
             return state
 
         if LightColor.YELLOW in by_color:
@@ -225,7 +294,9 @@ class TrafficLightLogic:
             state.active_color = LightColor.GREEN
             state.last_distance_m = mem.last_distance_m
             self._last_non_yellow = LightColor.GREEN
-            state.reason = "GREEN, go"
+            elapsed = (now - self._green_started_at) if self._green_started_at is not None else 0.0
+            state.green_elapsed_s = elapsed
+            state.reason = f"GREEN, go (elapsed={elapsed:.1f}s)"
             return state
 
         return state

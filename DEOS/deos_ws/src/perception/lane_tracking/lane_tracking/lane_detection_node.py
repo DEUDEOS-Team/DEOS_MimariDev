@@ -12,6 +12,8 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32MultiArray, String
 
+from deos_algorithms.ros_topic_layout import build_deos_topics
+
 
 def _preprocess(frame_bgr: np.ndarray, *, img_w: int, img_h: int) -> np.ndarray:
     img = cv2.resize(frame_bgr, (img_w, img_h), interpolation=cv2.INTER_LINEAR)
@@ -114,10 +116,12 @@ class LaneDetectionNode(Node):
     def __init__(self):
         super().__init__("lane_detection_node")
 
-        self.declare_parameter("image_topic", "/camera/color/image_raw")
-        self.declare_parameter("out_center_pts_topic", "/perception/center_pts")
+        self.declare_parameter("deos_root", "/deos")
+        _T = build_deos_topics(str(self.get_parameter("deos_root").value))
+        self.declare_parameter("image_topic", _T["sensors_camera_color"])
+        self.declare_parameter("out_center_pts_topic", _T["perception_lane_center_pts"])
         self.declare_parameter("publish_debug", False)
-        self.declare_parameter("debug_topic", "/perception/lane_debug")
+        self.declare_parameter("debug_topic", _T["perception_lane_debug"])
 
         self.declare_parameter("hef_path", "model.hef")
         self.declare_parameter("img_w", 640)

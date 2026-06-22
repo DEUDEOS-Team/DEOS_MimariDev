@@ -5,6 +5,8 @@ from geometry_msgs.msg import Twist
 from rclpy.node import Node
 from std_msgs.msg import Bool, Float32
 
+from deos_algorithms.ros_topic_layout import build_deos_topics
+
 
 class VehicleControllerNode(Node):
     PERCEPTION_TIMEOUT_S = 0.2
@@ -16,23 +18,35 @@ class VehicleControllerNode(Node):
         self.declare_parameter("max_speed_mps", 3.0)
         self.declare_parameter("max_steer_rads", 1.0)
         self.declare_parameter("safety_emergency_stop_pulse_count", 3)
-        self.declare_parameter("publish_cmd_vel_in_emergency", False)
+        # True: acil dur sırasında sıfır hız Twist yayınla (STM32 bridge negatif delta üretir).
+        # Birincil stop yolu /safety/emergency_stop via microROS; bu yazılım katmanı ikincil güvencedir.
+        self.declare_parameter("publish_cmd_vel_in_emergency", True)
         self.declare_parameter("publish_safety_emergency_stop_false_on_clear", True)
+        self.declare_parameter("deos_root", "/deos")
+        _T = build_deos_topics(str(self.get_parameter("deos_root").value))
         # Opsiyonel: lane_control referanslarını kullan (GPS planning yerine)
         self.declare_parameter("use_lane_control", True)
-        self.declare_parameter("lane_steering_topic", "/lane/steering_ref")
-        self.declare_parameter("lane_speed_topic", "/lane/speed_limit")
+        self.declare_parameter("lane_steering_topic", _T["lane_steering_ref"])
+        self.declare_parameter("lane_speed_topic", _T["lane_speed_limit"])
         self.declare_parameter("lane_timeout_s", 0.2)
         # Opsiyonel çift kilit: STM32 komutunu doğrudan dinle (perception ile aynı semantik)
         self.declare_parameter("subscribe_hardware_motion_enable", True)
-        self.declare_parameter("hardware_motion_enable_topic", "/hardware/motion_enable")
+        self.declare_parameter("hardware_motion_enable_topic", _T["hardware_motion_enable"])
         self.declare_parameter("hardware_motion_enable_timeout_s", 0.5)
         self.declare_parameter("hardware_motion_enable_fail_safe_stop", True)
         # Manuel/otonom ayrımı: otonom kapalıysa /cmd_vel publish etme (STM32 manual sürüşe geçebilir)
         self.declare_parameter("subscribe_autonomy_enable", True)
-        self.declare_parameter("autonomy_enable_topic", "/hardware/autonomy_enable")
+        self.declare_parameter("autonomy_enable_topic", _T["hardware_autonomy_enable"])
         self.declare_parameter("subscribe_failsafe", True)
-        self.declare_parameter("failsafe_root", "/deos/failsafe")
+        self.declare_parameter("green_elapsed_s_topic", _T["perception_fusion_green_elapsed_s"])
+        self.declare_parameter("perception_emergency_stop_topic", _T["perception_fusion_emergency_stop"])
+        self.declare_parameter("perception_speed_cap_topic", _T["perception_fusion_speed_cap"])
+        self.declare_parameter("perception_steering_override_topic", _T["perception_fusion_steering_override"])
+        self.declare_parameter("perception_has_steering_override_topic", _T["perception_fusion_has_steering_override"])
+        self.declare_parameter("planning_steering_ref_topic", _T["planning_steering_ref"])
+        self.declare_parameter("planning_speed_limit_topic", _T["planning_speed_limit"])
+        self.declare_parameter("cmd_vel_topic", _T["control_cmd_vel"])
+        self.declare_parameter("safety_emergency_stop_topic", _T["safety_emergency_stop"])
         self._max_speed = float(self.get_parameter("max_speed_mps").value)
         self._max_steer = float(self.get_parameter("max_steer_rads").value)
 
@@ -60,14 +74,28 @@ class VehicleControllerNode(Node):
 
         self._failsafe_estop: bool = False
         self._failsafe_speed_cap: float = 1.0
+        # Yeşil ışık geçen süre: -1.0 = yeşil ışık yok (şartname tepki süresi takibi)
+        self._green_elapsed_s: float = -1.0
 
-        self.create_subscription(Bool, "/perception/emergency_stop", self._estop_cb, 10)
-        self.create_subscription(Float32, "/perception/speed_cap", self._speed_cap_cb, 10)
-        self.create_subscription(Float32, "/perception/steering_override", self._steer_ovr_cb, 10)
-        self.create_subscription(Bool, "/perception/has_steering_override", self._has_steer_cb, 10)
+        self.create_subscription(
+            Bool, str(self.get_parameter("perception_emergency_stop_topic").value), self._estop_cb, 10
+        )
+        self.create_subscription(
+            Float32, str(self.get_parameter("perception_speed_cap_topic").value), self._speed_cap_cb, 10
+        )
+        self.create_subscription(
+            Float32, str(self.get_parameter("perception_steering_override_topic").value), self._steer_ovr_cb, 10
+        )
+        self.create_subscription(
+            Bool, str(self.get_parameter("perception_has_steering_override_topic").value), self._has_steer_cb, 10
+        )
 
-        self.create_subscription(Float32, "/planning/steering_ref", self._plan_steer_cb, 10)
-        self.create_subscription(Float32, "/planning/speed_limit", self._plan_speed_cb, 10)
+        self.create_subscription(
+            Float32, str(self.get_parameter("planning_steering_ref_topic").value), self._plan_steer_cb, 10
+        )
+        self.create_subscription(
+            Float32, str(self.get_parameter("planning_speed_limit_topic").value), self._plan_speed_cb, 10
+        )
 
         if bool(self.get_parameter("use_lane_control").value):
             self.create_subscription(Float32, str(self.get_parameter("lane_steering_topic").value), self._lane_steer_cb, 10)
@@ -89,15 +117,24 @@ class VehicleControllerNode(Node):
             self.get_logger().info(f"autonomy_enable subscription enabled on {at}")
 
         if bool(self.get_parameter("subscribe_failsafe").value):
-            root = str(self.get_parameter("failsafe_root").value).strip().rstrip("/")
-            fet = f"{root}/out/emergency_stop"
-            fst = f"{root}/out/speed_cap"
+            fet = _T["failsafe_out_emergency_stop"]
+            fst = _T["failsafe_out_speed_cap"]
             self.create_subscription(Bool, fet, self._failsafe_estop_cb, 10)
             self.create_subscription(Float32, fst, self._failsafe_speed_cap_cb, 10)
-            self.get_logger().info(f"failsafe (root={root!r}): {fet}, {fst}")
+            self.get_logger().info(f"failsafe topics: {fet}, {fst}")
 
-        self._pub_cmd = self.create_publisher(Twist, "/cmd_vel", 10)
-        self._pub_estop = self.create_publisher(Bool, "/safety/emergency_stop", 10)
+        self.create_subscription(
+            Float32,
+            str(self.get_parameter("green_elapsed_s_topic").value),
+            self._green_elapsed_cb,
+            10,
+        )
+
+        cmd_out = str(self.get_parameter("cmd_vel_topic").value)
+        self._pub_cmd = self.create_publisher(Twist, cmd_out, 10)
+        self._pub_estop = self.create_publisher(
+            Bool, str(self.get_parameter("safety_emergency_stop_topic").value), 10
+        )
 
         self.create_timer(0.05, self._tick)
         self.get_logger().info(
@@ -130,6 +167,9 @@ class VehicleControllerNode(Node):
     def _autonomy_enable_cb(self, msg: Bool) -> None:
         self._autonomy_enable = bool(msg.data)
         self._autonomy_stamp = time.monotonic()
+
+    def _green_elapsed_cb(self, msg: Float32) -> None:
+        self._green_elapsed_s = float(msg.data)
 
     def _failsafe_estop_cb(self, msg: Bool) -> None:
         self._failsafe_estop = bool(msg.data)
@@ -258,6 +298,18 @@ class VehicleControllerNode(Node):
 
         cmd.linear.x = speed_ratio * self._max_speed
         cmd.angular.z = steer_ratio * self._max_steer
+
+        # Şartname tepki süresi diagnostiği: yeşil ışıkta araç duruyorsa log üret
+        if self._green_elapsed_s >= 0.0:
+            elapsed = self._green_elapsed_s
+            if elapsed > 30.0 and speed_ratio < 0.05:
+                self.get_logger().warn(
+                    f"YESIL_ISIK_GECIKME: {elapsed:.1f}s gecti, arac duruyor — sartname -20p riski"
+                )
+            elif elapsed > 5.0 and speed_ratio < 0.05:
+                self.get_logger().debug(
+                    f"YESIL_ISIK_GECIKME: {elapsed:.1f}s gecti, arac duruyor — sartname +20p bandi"
+                )
 
         self._pub_cmd.publish(cmd)
 

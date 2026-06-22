@@ -7,6 +7,8 @@ from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import String
 
+from deos_algorithms.ros_topic_layout import build_deos_topics
+
 
 class LidarObstacleNode(Node):
     def __init__(self):
@@ -16,14 +18,20 @@ class LidarObstacleNode(Node):
         self.declare_parameter("cluster_min_points", 5)
         self.declare_parameter("max_distance_m", 20.0)
         self.declare_parameter("corridor_half_width_m", 3.0)
+        self.declare_parameter("deos_root", "/deos")
+        _T = build_deos_topics(str(self.get_parameter("deos_root").value))
+        self.declare_parameter("cloud_topic", _T["sensors_lidar_points_downsampled"])
+        self.declare_parameter("lidar_obstacles_topic", _T["perception_lidar_obstacles"])
 
         self._eps = float(self.get_parameter("cluster_epsilon_m").value)
         self._min_pts = int(self.get_parameter("cluster_min_points").value)
         self._max_dist = float(self.get_parameter("max_distance_m").value)
         self._corridor_hw = float(self.get_parameter("corridor_half_width_m").value)
 
-        self.create_subscription(PointCloud2, "/points_downsampled", self._cloud_cb, 10)
-        self._pub = self.create_publisher(String, "/perception/lidar_obstacles", 10)
+        self.create_subscription(
+            PointCloud2, str(self.get_parameter("cloud_topic").value), self._cloud_cb, 10
+        )
+        self._pub = self.create_publisher(String, str(self.get_parameter("lidar_obstacles_topic").value), 10)
         self.get_logger().info("lidar_obstacle_node ready")
 
     def _cloud_cb(self, msg: PointCloud2) -> None:
