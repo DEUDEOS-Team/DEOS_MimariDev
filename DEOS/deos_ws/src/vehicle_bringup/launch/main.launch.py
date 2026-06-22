@@ -1,7 +1,8 @@
 import os
+from datetime import datetime
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -327,6 +328,51 @@ def generate_launch_description():
         respawn_delay=2,
     )
     
+    _bag_dir = f"/ros2_ws/bags/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    _bag_topics = [
+        # GPS
+        _T0["sensors_gps_fix"],
+        # Algı füzyonu (karar katmanı)
+        _T0["perception_fusion_emergency_stop"],
+        _T0["perception_fusion_speed_cap"],
+        _T0["perception_fusion_steering_override"],
+        _T0["perception_fusion_has_steering_override"],
+        _T0["perception_fusion_decision_debug"],
+        _T0["perception_fusion_green_elapsed_s"],
+        _T0["perception_fusion_turn_permissions"],
+        _T0["perception_fusion_park_complete"],
+        # Planlama
+        _T0["planning_steering_ref"],
+        _T0["planning_speed_limit"],
+        _T0["planning_current_task"],
+        _T0["planning_arrived"],
+        _T0["planning_park_mode"],
+        # Şerit kontrolü
+        _T0["lane_steering_ref"],
+        _T0["lane_speed_limit"],
+        # Lokalizasyon
+        _T0["localization_odom_final"],
+        # Donanım sinyalleri
+        _T0["hardware_motion_enable"],
+        _T0["hardware_autonomy_enable"],
+        # Kontrol çıkışı
+        _T0["control_cmd_vel"],
+        # Güvenlik
+        _T0["safety_emergency_stop"],
+        _T0["safety_lane_violation"],
+        # Aktüatörler
+        _T0["actuators_stm32_speed_delta_mps"],
+        _T0["actuators_stm32_steering_deg"],
+        # Failsafe
+        _T0["failsafe_out_emergency_stop"],
+        _T0["failsafe_out_speed_cap"],
+        _T0["failsafe_out_diagnostics"],
+    ]
+    bag_record = ExecuteProcess(
+        cmd=["ros2", "bag", "record", "-o", _bag_dir] + _bag_topics,
+        output="screen",
+    )
+
     return LaunchDescription([
         mission_file_arg,
         centerlines_file_arg,
@@ -363,4 +409,7 @@ def generate_launch_description():
         
         # === PIPELINE ===
         # Sensors -> Perception -> Planning -> Controller -> /cmd_vel
+
+        # === LOGGING ===
+        bag_record,
     ])

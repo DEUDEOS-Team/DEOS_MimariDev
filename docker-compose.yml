@@ -9,6 +9,7 @@ services:
       - ROS_LOCALHOST_ONLY=0
     volumes:
       - ./DEOS/deos_ws/src:/ros2_ws/src
+      - ./bags:/ros2_ws/bags
     working_dir: /ros2_ws
     command: bash
     stdin_open: true

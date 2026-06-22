@@ -35,6 +35,7 @@ SPEC = HealthSpec(
         "/pcl_localization_node",
         "/mission_planning_node",
         "/vehicle_controller_node",
+        "/failsafe_supervisor_node",
     ],
     require_stm32_subscriber=False,  # yarışma günü STM32 offline olabilir → WARN olarak raporla
 )
@@ -87,10 +88,10 @@ def check_nodes() -> tuple[bool, list[str], str]:
 
 
 def check_stm32_subscriber() -> tuple[bool, str]:
-    rc, out = ros_exec("ros2 topic info -v /cmd_vel", timeout_s=10)
+    rc, out = ros_exec("ros2 topic info -v /deos/control/cmd_vel", timeout_s=10)
     if rc != 0:
         return False, out
-    ok = "/stm32_node" in out
+    ok = "/stm32_bridge_node" in out
     return ok, out
 
 
