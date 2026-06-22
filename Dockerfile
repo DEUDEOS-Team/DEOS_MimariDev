@@ -29,16 +29,18 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     pyserial \
     pynmea2
 
-# 3. Copy source code early
-COPY . src/
+# 3. Copy only the ROS workspace source (not the full repo) so builder and
+#    runtime volume-mount paths both land at /ros2_ws/src/<package>.
+COPY DEOS/deos_ws/src ./src/
 
 # 4. Update rosdep and install dependencies (skip only non-essential packages)
 RUN rosdep update && \
     rosdep install --from-paths src --ignore-src -y \
     --skip-keys "hailort hailo_platform" || true
 
-# 5. Build workspace with optimized flags
-RUN /bin/bash -c "source /opt/ros/jazzy/setup.bash && colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release" || echo "Build finished with some packages incomplete"
+# 5. Build workspace — no --symlink-install so install has real files,
+#    not symlinks that break when the build context disappears.
+RUN /bin/bash -c "source /opt/ros/jazzy/setup.bash && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release"
 
 # Runtime stage: lean production image
 FROM ros:jazzy
@@ -50,13 +52,25 @@ COPY --from=builder /ros2_ws/install ./install
 COPY --from=builder /ros2_ws/src ./src
 COPY --from=builder /ros2_ws/build ./build
 
-# Install runtime dependencies only (minimal set)
+# Install runtime dependencies (mirrors builder stage system packages)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-setuptools \
+    python3-pip \
     python3-numpy \
+    python-is-python3 \
     python3-opencv \
     libopencv-dev \
-    python3-pip \
-    python3-setuptools \
+    python3-colcon-common-extensions \
+    ros-jazzy-pcl-ros \
+    ros-jazzy-perception-pcl \
+    ros-jazzy-pcl-conversions \
+    ros-jazzy-tf2-geometry-msgs \
+    ros-jazzy-tf2-ros \
+    ros-jazzy-tf2-eigen \
+    ros-jazzy-nav-msgs \
+    ros-jazzy-cv-bridge \
+    ros-jazzy-robot-localization \
+    ros-jazzy-sick-scan-xd \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python packages

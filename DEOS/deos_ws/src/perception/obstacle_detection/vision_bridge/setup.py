@@ -14,7 +14,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*.launch.py'))),
     ],
-    install_requires=['setuptools', 'rclpy', 'sensor_msgs', 'cv_bridge', 'opencv-python', 'numpy'],
+    install_requires=['setuptools'],
     zip_safe=True,
     maintainer='aaltindas',
     maintainer_email='aaltindas.work@gmail.com',

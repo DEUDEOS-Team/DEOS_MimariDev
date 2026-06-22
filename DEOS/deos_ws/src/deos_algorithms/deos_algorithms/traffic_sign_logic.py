@@ -131,6 +131,10 @@ class TurnPermissions:
             self.forced_direction = "pass_right"
         elif sign_class == SignClass.ROUNDABOUT:
             self.forced_direction = "roundabout"
+        elif sign_class == SignClass.LANE_ARRANGEMENT_H:
+            self.forced_direction = "pass_right"
+        elif sign_class == SignClass.LANE_ARRANGEMENT_I:
+            self.forced_direction = "pass_left"
 
 
 @dataclass
@@ -270,7 +274,8 @@ class TrafficSignLogic:
                 state.reasons.append("pedestrian crossing ahead")
 
             elif cls == SignClass.BUS_STOP:
-                pass
+                state.speed_cap_ratio = min(state.speed_cap_ratio, 0.4)
+                state.reasons.append("bus stop: slow down")
 
             elif cls in TURN_RESTRICTION:
                 self._pending_turn_restrictions.apply_restriction(cls)

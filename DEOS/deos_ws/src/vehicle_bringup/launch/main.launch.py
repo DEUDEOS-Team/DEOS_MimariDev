@@ -101,6 +101,12 @@ def generate_launch_description():
         description="Centerlines GeoJSON'da tunnel: true varsa her bacak en az bir tünel kenarından geçer (görev dosyasında alan gerekmez).",
     )
 
+    stereo_model_path_arg = DeclareLaunchArgument(
+        "stereo_model_path",
+        default_value="/ros2_ws/model.hef",
+        description="Hailo AI HAT üzerindeki YOLOv8 HEF model dosyasının tam yolu",
+    )
+
     # Sensor Nodes
     camera_node = Node(
         package='camera',
@@ -162,6 +168,10 @@ def generate_launch_description():
             "image_width": 640,
             "image_height": 480,
             "focal_length_px": 320.0,
+            "model_path": LaunchConfiguration("stereo_model_path"),
+            "model_backend": "hailo",
+            "conf_threshold": 0.35,
+            "use_coco_mapping": False,
         }],
         output="screen",
         respawn=True,
@@ -382,6 +392,7 @@ def generate_launch_description():
         autonomy_enable_topic_arg,
         require_go_signal_arg,
         tunnel_mandatory_arg,
+        stereo_model_path_arg,
         # === SENSORS (Raw Data Acquisition) ===
         camera_node,           # RGB frames: /camera/color/image_raw (30 Hz)
         gps_node,              # GPS location: /gps/fix (5-10 Hz)
