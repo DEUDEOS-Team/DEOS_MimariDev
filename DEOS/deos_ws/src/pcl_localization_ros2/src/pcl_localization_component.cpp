@@ -15,7 +15,7 @@ PCLLocalization::PCLLocalization(const rclcpp::NodeOptions & options)
   declare_parameter("scan_min_range", 1.0);
   declare_parameter("scan_period", 0.1);
   declare_parameter("use_pcd_map", false);
-  declare_parameter("map_path", "/map/map.pcd");
+  declare_parameter("map_path", "DEOS/deos_ws/src/perception/sensor_fusion/config");
   declare_parameter("set_initial_pose", false);
   declare_parameter("initial_pose_x", 0.0);
   declare_parameter("initial_pose_y", 0.0);
