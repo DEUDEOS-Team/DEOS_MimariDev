@@ -327,7 +327,7 @@ class PerceptionFusionNode(Node):
         light_state = self._light.update(frame.light_dets)
         # Sensör önceliği:
         # - Engeller: LiDAR öncelikli; stereo sadece "pedestrian" ile destek (sınıflandırma).
-        # - Slalom: stereo "cone" (LiDAR'dan koni sınıfı gelmiyor varsayımı).
+        # - Slalom: LiDAR statik engeller (koni/bariyer/unknown) — geometri-tabanlı sınıflandırma.
         lidar_obs = frame.lidar_obstacle_dets
         stereo_obs = frame.stereo_obstacle_dets
         lane = self._lane_bounds if lane_fresh else None
@@ -345,7 +345,7 @@ class PerceptionFusionNode(Node):
                     filtered_lidar_obs.append(d)
 
         obs_input = list(filtered_lidar_obs) + [d for d in stereo_obs if d.kind == "pedestrian"]
-        slalom_input = [d for d in stereo_obs if d.kind == "cone"]
+        slalom_input = [d for d in filtered_lidar_obs if d.kind in {"cone", "barrier", "unknown"}]
 
         obs_state = self._obstacle.update(obs_input)
         slalom_state = self._slalom.update(slalom_input)

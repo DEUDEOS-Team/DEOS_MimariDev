@@ -1294,12 +1294,12 @@ def test_slalom_hiz_katsayisi_yakin():
 
 
 def test_slalom_tamamlanma_15_frame():
-    """BITTI_FRAME_ESIK=15 boş kare sonrası faz 'bitti' olmalı."""
-    from deos_algorithms.slalom_logic import BITTI_FRAME_ESIK, SlalomLogic
+    """LAST_KNOWN_FRAME_ESIK + BITTI_FRAME_ESIK boş kare sonrası faz 'bitti' olmalı."""
+    from deos_algorithms.slalom_logic import BITTI_FRAME_ESIK, LAST_KNOWN_FRAME_ESIK, SlalomLogic
     sl = SlalomLogic()
     sl.update([_slalom_cone_det(2.0, lateral_offset=0.5)])   # aktif et
     state = None
-    for _ in range(BITTI_FRAME_ESIK):
+    for _ in range(LAST_KNOWN_FRAME_ESIK + BITTI_FRAME_ESIK):
         state = sl.update([])
     assert state.faz == "bitti"
 
@@ -1570,18 +1570,19 @@ def test_slalom_tek_koni_solda_saga_steer():
 
 def test_slalom_faz_zinciri_bekleme_aktif_bitti():
     """
-    Tam slalom faz zinciri: bekleme -> aktif (koni var) -> bitti (BITTI_FRAME_ESIK kare bos).
+    Tam slalom faz zinciri: bekleme -> aktif (koni var) -> bitti (LAST_KNOWN_FRAME_ESIK + BITTI_FRAME_ESIK kare bos).
     Arac test videosunda gereken slalom manevrasi senaryosu.
     """
-    from deos_algorithms.slalom_logic import BITTI_FRAME_ESIK, SlalomLogic
+    from deos_algorithms.slalom_logic import BITTI_FRAME_ESIK, LAST_KNOWN_FRAME_ESIK, SlalomLogic
     sl = SlalomLogic()
     assert sl.update([]).faz == "bekleme", "Baslangicta faz 'bekleme' olmali."
     st = sl.update([_slalom_cone_det(2.0, lateral_offset=0.3)])
     assert st.aktif is True, "Koni gorulunce slalom aktif olmali."
     state = None
-    for _ in range(BITTI_FRAME_ESIK):
+    total = LAST_KNOWN_FRAME_ESIK + BITTI_FRAME_ESIK
+    for _ in range(total):
         state = sl.update([])
-    assert state.faz == "bitti", f"Bos {BITTI_FRAME_ESIK} kare sonra faz 'bitti' olmali."
+    assert state.faz == "bitti", f"Bos {total} kare sonra faz 'bitti' olmali."
 
 
 # ──────────────────────────────────────────────────────────────────────────────

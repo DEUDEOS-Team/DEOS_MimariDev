@@ -23,22 +23,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-sick-scan-xd \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Install Python packages with --break-system-packages
+# 2. Install Hailo runtime via apt (aynı versiyon host Pi ile uyumlu olmalı)
+#    Pi OS Bookworm: hailo-all apt reposu /etc/apt/sources.list.d/ altında zaten ekli.
+#    Bu image Ubuntu 24.04 tabanlı — Pi'de aşağıdaki komutla repo eklenmişse burada da çalışır:
+#      sudo apt install hailo-all  (Pi OS Bookworm varsayılan reposundan)
+#    Eğer Hailo apt reposu host'ta /etc/apt/sources.list.d/hailo.list ise docker run sırasında
+#    volume-mount ile de geçirilebilir; alternatif olarak pip wheel kullanılabilir.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    hailort \
+    && rm -rf /var/lib/apt/lists/* || true
+
+# 3. Install Python packages with --break-system-packages
 RUN pip3 install --no-cache-dir --break-system-packages \
     pyrealsense2 \
     pyserial \
-    pynmea2
+    pynmea2 \
+    hailort==4.23.0
 
-# 3. Copy only the ROS workspace source (not the full repo) so builder and
+# 4. Copy only the ROS workspace source (not the full repo) so builder and
 #    runtime volume-mount paths both land at /ros2_ws/src/<package>.
 COPY DEOS/deos_ws/src ./src/
 
-# 4. Update rosdep and install dependencies (skip only non-essential packages)
+# 5. Update rosdep and install dependencies
 RUN rosdep update && \
     rosdep install --from-paths src --ignore-src -y \
     --skip-keys "hailort hailo_platform" || true
 
-# 5. Build workspace — no --symlink-install so install has real files,
+# 6. Build workspace — no --symlink-install so install has real files,
 #    not symlinks that break when the build context disappears.
 RUN /bin/bash -c "source /opt/ros/jazzy/setup.bash && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release"
 
@@ -77,7 +88,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip3 install --no-cache-dir --break-system-packages \
     pyrealsense2 \
     pyserial \
-    pynmea2
+    pynmea2 \
+    hailort==4.23.0
 
 # Set environment for ROS - suppress missing package warnings
 RUN echo 'source /opt/ros/jazzy/setup.bash' >> /etc/bash.bashrc && \

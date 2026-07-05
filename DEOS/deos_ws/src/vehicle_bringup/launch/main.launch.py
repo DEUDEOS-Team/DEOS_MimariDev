@@ -103,8 +103,14 @@ def generate_launch_description():
 
     stereo_model_path_arg = DeclareLaunchArgument(
         "stereo_model_path",
-        default_value="/ros2_ws/model.hef",
-        description="Hailo AI HAT üzerindeki YOLOv8 HEF model dosyasının tam yolu",
+        default_value="/ros2_ws/models/detection.hef",
+        description="Hailo AI HAT üzerindeki YOLOv8 object detection HEF model dosyasının tam yolu",
+    )
+
+    lane_model_path_arg = DeclareLaunchArgument(
+        "lane_model_path",
+        default_value="/ros2_ws/models/lane_seg.hef",
+        description="Hailo AI HAT üzerindeki YOLOv8 segmentation HEF model dosyasının tam yolu",
     )
 
     # Sensor Nodes
@@ -218,7 +224,7 @@ def generate_launch_description():
         name="lane_detection_node",
         parameters=[{
             "deos_root": LaunchConfiguration("deos_root"),
-            "hef_path": "model.hef",
+            "hef_path": LaunchConfiguration("lane_model_path"),
         }],
         output="screen",
         respawn=True,
@@ -393,6 +399,7 @@ def generate_launch_description():
         require_go_signal_arg,
         tunnel_mandatory_arg,
         stereo_model_path_arg,
+        lane_model_path_arg,
         # === SENSORS (Raw Data Acquisition) ===
         camera_node,           # RGB frames: /camera/color/image_raw (30 Hz)
         gps_node,              # GPS location: /gps/fix (5-10 Hz)
