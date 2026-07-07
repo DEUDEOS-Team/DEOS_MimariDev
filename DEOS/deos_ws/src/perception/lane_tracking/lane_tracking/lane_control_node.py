@@ -1,5 +1,27 @@
 from __future__ import annotations
 
+"""
+lane_control_node — şerit bazlı direksiyon/hız referansı (deos mimarisi).
+
+GÜNCELLEME: Kontrol matematiği, şu an kullandığımız kanıtlanmış sürümle
+(autonomous_control_node) birebir eşitlendi:
+  • kp kazancı (varsayılan 0.8) — eski sürümde kazanç yoktu (örtük 1.0)
+  • Direksiyon EMA yumuşatma (steer_alpha=0.3) — eski sürümde YOKTU (ham steer titrer)
+  • Gaz EMA yumuşatma (throttle_alpha=0.2) — eski sürümde YOKTU
+  • Şerit-kayıp toleransı: 1.0 s boyunca son geçerli steer + %80 gaz, sonra dur
+  • Hedef nokta: pts[len//2 + 2] (orta-ileri) — intent varsa yakın alan (dönüş hazırlığı)
+
+Mimari uyumu DEĞİŞMEDİ:
+  - Bu node DOĞRUDAN /cmd_vel üretmez.
+  - /lane/steering_ref (-1..1) ve /lane/speed_limit (0..1 oran) yayınlar.
+  - vehicle_controller_node parametre ile bu lane referanslarını tercih edebilir
+    (tazelik kontrolüyle).
+
+NOT: steer_cmd_mul varsayılanı 0.65 -> 1.0 yapıldı; kazanç artık kp üzerinden
+(0.8) uygulanıyor. İkisi birden uygulanırsa direksiyon aşırı sönük kalır.
+Araç sahasında ayar gerekirse kp ile oynayın.
+"""
+
 import time
 from collections import deque
 
@@ -14,11 +36,6 @@ from deos_algorithms.ros_topic_layout import build_deos_topics
 class LaneControlNode(Node):
     """
     /perception/center_pts -> şerit bazlı steer/speed referansı üretir.
-
-    Mimari uyumu:
-    - Bu node DOĞRUDAN /cmd_vel üretmez.
-    - /lane/steering_ref ve /lane/speed_limit yayınlar.
-    - vehicle_controller_node parametre ile bu lane referanslarını tercih edebilir (tazelik kontrolüyle).
     """
 
     def __init__(self):
@@ -31,7 +48,15 @@ class LaneControlNode(Node):
         self.declare_parameter("lane_speed_topic", _T["lane_speed_limit"])
         self.declare_parameter("camera_w", 640)   # D415 node 640x480 yayınlar
         self.declare_parameter("camera_h", 480)
-        self.declare_parameter("steer_cmd_mul", 0.65)
+
+        # ── Kontrol parametreleri (autonomous_control ile AYNI) ──
+        # Kontrolcü kazancı (büyük = aynı hata için daha sert direksiyon)
+        self.declare_parameter("kp", 0.8)
+        # steer_alpha: büyük = daha çevik/hızlı direksiyon tepkisi (az gecikme)
+        self.declare_parameter("steer_alpha", 0.3)
+        self.declare_parameter("throttle_alpha", 0.2)
+        # Son çarpan (eski steer_cmd_mul) — kazanç artık kp'de; 1.0 bırakın
+        self.declare_parameter("steer_cmd_mul", 1.0)
         self.declare_parameter("lane_lost_patience_s", 1.0)
 
         # intent (opsiyonel): 1=sol, 2=sağ, 0=reset
@@ -40,6 +65,9 @@ class LaneControlNode(Node):
 
         self._cam_w = float(self.get_parameter("camera_w").value)
         self._cam_h = float(self.get_parameter("camera_h").value)
+        self._kp = float(self.get_parameter("kp").value)
+        self._steer_alpha = float(self.get_parameter("steer_alpha").value)
+        self._throttle_alpha = float(self.get_parameter("throttle_alpha").value)
 
         self._pub_steer = self.create_publisher(Float32, str(self.get_parameter("lane_steer_topic").value), 10)
         self._pub_speed = self.create_publisher(Float32, str(self.get_parameter("lane_speed_topic").value), 10)
@@ -64,30 +92,35 @@ class LaneControlNode(Node):
 
     def _calculate_commands(self) -> tuple[float, float]:
         now = time.perf_counter()
-        steer, throttle = 0.0, 0.0
 
         if self._center_pts_list and self._center_pts_list[0]:
             pts = self._center_pts_list[0]
-            # target point: mid-ish; if intent exists, bias to near field (turn prep)
+            # Hedef nokta: orta-ileri; intent varsa yakın alan (dönüş hazırlığı)
             if self._intent_queue:
                 target_idx = min(2, len(pts) - 1)
             else:
                 target_idx = min(len(pts) // 2 + 2, len(pts) - 1)
 
             target_x, _ = pts[target_idx]
-            error = (float(target_x) - (self._cam_w / 2.0)) / (self._cam_w / 2.0)
-            steer = float(np.clip(error, -1.0, 1.0))
+            center_camera_x = self._cam_w / 2.0
+            error = (float(target_x) - center_camera_x) / center_camera_x
 
-            # simple speed policy
-            throttle = 0.5 if abs(steer) < 0.2 else 0.35
+            # P kontrolcü + hız politikası (autonomous_control ile AYNI)
+            raw_steer = float(np.clip(self._kp * error, -1.0, 1.0))
+            raw_throttle = 0.5 if abs(raw_steer) < 0.2 else 0.35
+
+            # EMA yumuşatma — titremeyi keser, viraj geçişini akıcı yapar
+            steer = (self._steer_alpha * raw_steer) + ((1.0 - self._steer_alpha) * self._last_valid_steer)
+            throttle = (self._throttle_alpha * raw_throttle) + ((1.0 - self._throttle_alpha) * self._last_valid_throttle)
 
             steer = float(np.clip(steer * float(self.get_parameter("steer_cmd_mul").value), -1.0, 1.0))
+
             self._last_valid_steer = steer
             self._last_valid_throttle = throttle
             self._last_lane_t = now
             return steer, throttle
 
-        # lane lost fallback
+        # Şerit-kayıp toleransı: kısa süre son geçerli komutla devam, sonra dur
         patience = float(self.get_parameter("lane_lost_patience_s").value)
         if (now - self._last_lane_t) < patience:
             return self._last_valid_steer, self._last_valid_throttle * 0.8
@@ -115,9 +148,9 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
     main()
-
