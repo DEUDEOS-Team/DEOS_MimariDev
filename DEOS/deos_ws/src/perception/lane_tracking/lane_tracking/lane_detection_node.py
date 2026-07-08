@@ -41,6 +41,8 @@ from std_msgs.msg import Float32MultiArray, String
 
 from deos_algorithms.ros_topic_layout import build_deos_topics
 
+from deos_logging.logger import DeosLogger
+
 # ============================================================
 # HEF / ÇIKARIM AYARLARI
 # ============================================================
@@ -350,6 +352,7 @@ class LaneDetectionNode(Node):
 
     def __init__(self):
         super().__init__("lane_detection_node")
+        self.logger = DeosLogger(self.get_logger(), "lane_detection_node")
 
         self.declare_parameter("deos_root", "/deos")
         _T = build_deos_topics(str(self.get_parameter("deos_root").value))
@@ -393,7 +396,7 @@ class LaneDetectionNode(Node):
     def _init_hailo(self) -> None:
         hef_path = Path(str(self.get_parameter("hef_path").value))
         if not hef_path.exists():
-            self.get_logger().error(f"HEF bulunamadı: {hef_path}")
+            self.logger.error(f"HEF bulunamadı: {hef_path}")
             return
 
         try:
@@ -408,7 +411,7 @@ class LaneDetectionNode(Node):
                 FormatType,
             )
         except Exception as e:
-            self.get_logger().error(f"hailo_platform import edilemedi (Raspberry/Hailo gerekli): {e}")
+            self.logger.error(f"hailo_platform import edilemedi (Raspberry/Hailo gerekli): {e}")
             return
 
         try:
@@ -432,9 +435,9 @@ class LaneDetectionNode(Node):
                 InferVStreams(network_group, in_params, out_params))
 
             self._hailo_ok = True
-            self.get_logger().info("lane_detection_node: Hailo hazır (UINT8 giriş, kalıcı vstream)")
+            self.logger.info("lane_detection_node: Hailo hazır (UINT8 giriş, kalıcı vstream)")
         except Exception as e:
-            self.get_logger().error(f"Hailo init hatası: {e}")
+            self.logger.error(f"Hailo init hatası: {e}")
 
     def _image_cb(self, msg: Image) -> None:
         if not self._hailo_ok:
@@ -443,7 +446,7 @@ class LaneDetectionNode(Node):
         try:
             frame = self._bridge.imgmsg_to_cv2(msg, "bgr8")
         except Exception as e:
-            self.get_logger().error(f"cv_bridge: {e}")
+            self.logger.error(f"cv_bridge: {e}")
             return
 
         orig_h, orig_w = frame.shape[:2]
@@ -456,7 +459,7 @@ class LaneDetectionNode(Node):
         try:
             raw_outputs = self._infer_pipeline.infer({str(self._input_name): tensor_input})
         except Exception as e:
-            self.get_logger().error(f"Hailo inference: {e}")
+            self.logger.error(f"Hailo inference: {e}")
             return
 
         # ── HEF çıktısı -> lane_test sözleşmesi ──

@@ -4,10 +4,13 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
 
+from deos_logging.logger import DeosLogger
+
 
 class CameraNode(Node):
     def __init__(self):
         super().__init__('camera_node')
+        self.logger = DeosLogger(self.get_logger(), "camera_node")
         
         # Parameters
         self.declare_parameter('device_id', 0)
@@ -27,10 +30,10 @@ class CameraNode(Node):
         self.cap.set(cv2.CAP_PROP_FPS, fps)
         
         if not self.cap.isOpened():
-            self.get_logger().error(f"Failed to open camera device {device_id}")
+            self.logger.error(f"Failed to open camera device {device_id}")
             return
         
-        self.get_logger().info(f"Camera opened: {frame_width}x{frame_height} @ {fps}fps")
+        self.logger.info(f"Camera opened: {frame_width}x{frame_height} @ {fps}fps")
         
         # Publisher
         self.publisher_ = self.create_publisher(Image, '/camera/image_raw', 10)
@@ -46,7 +49,7 @@ class CameraNode(Node):
             msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
             self.publisher_.publish(msg)
         else:
-            self.get_logger().warn("Failed to capture frame")
+            self.logger.warning("Failed to capture frame")
 
     def destroy_node(self):
         self.cap.release()

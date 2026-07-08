@@ -6,10 +6,13 @@ import cv2
 import numpy as np
 import struct
 
+from deos_logging.logger import DeosLogger
+
 
 class LaneToWallNode(Node):
     def __init__(self):
         super().__init__('vision_bridge_node')
+        self.logger = DeosLogger(self.get_logger(), "vision_bridge_node")
         
         # Parameters
         self.declare_parameter('input_topic', '/camera/image_raw')
@@ -20,9 +23,9 @@ class LaneToWallNode(Node):
         input_topic = self.get_parameter('input_topic').value
         output_topic = self.get_parameter('output_topic').value
         
-        self.get_logger().info(f"Initializing vision_bridge_node")
-        self.get_logger().info(f"  Input:  {input_topic}")
-        self.get_logger().info(f"  Output: {output_topic}")
+        self.logger.info(f"Initializing vision_bridge_node")
+        self.logger.info(f"  Input:  {input_topic}")
+        self.logger.info(f"  Output: {output_topic}")
         
         self.subscription = self.create_subscription(
             Image,
@@ -39,7 +42,7 @@ class LaneToWallNode(Node):
         
         self.bridge = CvBridge()
         self.frame_count = 0
-        self.get_logger().info("Vision bridge node ready - waiting for camera frames...")
+        self.logger.info("Vision bridge node ready - waiting for camera frames...")
 
     def image_callback(self, msg):
         self.frame_count += 1
@@ -47,7 +50,7 @@ class LaneToWallNode(Node):
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         except Exception as e:
-            self.get_logger().error(f"Failed to convert image: {e}")
+            self.logger.error(f"Failed to convert image: {e}")
             return
 
         points_3d = self.detect_lanes_and_convert(frame)
@@ -56,7 +59,7 @@ class LaneToWallNode(Node):
             self.publish_point_cloud(points_3d)
             
         if self.frame_count % 30 == 0:
-            self.get_logger().info(f"Processed {self.frame_count} frames")
+            self.logger.info(f"Processed {self.frame_count} frames")
 
     def detect_lanes_and_convert(self, frame):
         """
@@ -106,7 +109,7 @@ class LaneToWallNode(Node):
             return points_3d
         
         except Exception as e:
-            self.get_logger().error(f"Lane detection error: {e}")
+            self.logger.error(f"Lane detection error: {e}")
             return []
 
     def publish_point_cloud(self, points):
@@ -145,7 +148,7 @@ def main(args=None):
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("Shutting down vision_bridge_node")
+        node.logger.info("Shutting down vision_bridge_node")
     finally:
         node.destroy_node()
         rclpy.shutdown()

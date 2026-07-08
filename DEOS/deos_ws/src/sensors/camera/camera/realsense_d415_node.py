@@ -7,10 +7,13 @@ import numpy as np
 
 from deos_algorithms.ros_topic_layout import build_deos_topics
 
+from deos_logging.logger import DeosLogger
+
 
 class RealSenseD415Node(Node):
     def __init__(self):
         super().__init__('realsense_d415_node')
+        self.logger = DeosLogger(self.get_logger(), "realsense_d415_node")
         
         # Parameters
         self.declare_parameter('deos_root', '/deos')
@@ -29,7 +32,7 @@ class RealSenseD415Node(Node):
         height = self.get_parameter('frame_height').value
         fps = self.get_parameter('fps').value
         
-        self.get_logger().info("Initializing RealSense D415...")
+        self.logger.info("Initializing RealSense D415...")
         
         # Initialize RealSense pipeline
         self.pipeline = rs.pipeline()
@@ -42,7 +45,7 @@ class RealSenseD415Node(Node):
         try:
             # Start pipeline
             profile = self.pipeline.start(self.config)
-            self.get_logger().info("RealSense pipeline started successfully")
+            self.logger.info("RealSense pipeline started successfully")
             
             # Get stream profiles for camera info
             color_profile = profile.get_stream(rs.stream.color).as_video_stream_profile()
@@ -55,8 +58,8 @@ class RealSenseD415Node(Node):
             self.align = rs.align(rs.stream.color)
             
         except Exception as e:
-            self.get_logger().error(f"Failed to start RealSense: {e}")
-            self.get_logger().error("Make sure RealSense D415 is connected via USB 3.0")
+            self.logger.error(f"Failed to start RealSense: {e}")
+            self.logger.error("Make sure RealSense D415 is connected via USB 3.0")
             return
         
         # Publishers
@@ -72,10 +75,10 @@ class RealSenseD415Node(Node):
         timer_period = 1.0 / fps
         self.timer = self.create_timer(timer_period, self.capture_frame)
         
-        self.get_logger().info(f"RealSense D415 node ready")
-        self.get_logger().info(f"  RGB:   {rgb_topic}")
-        self.get_logger().info(f"  Depth: {depth_topic}")
-        self.get_logger().info(f"  Resolution: {width}x{height} @ {fps}fps")
+        self.logger.info(f"RealSense D415 node ready")
+        self.logger.info(f"  RGB:   {rgb_topic}")
+        self.logger.info(f"  Depth: {depth_topic}")
+        self.logger.info(f"  Resolution: {width}x{height} @ {fps}fps")
 
     def capture_frame(self):
         try:
@@ -88,7 +91,7 @@ class RealSenseD415Node(Node):
             depth_frame = aligned_frames.get_depth_frame()
             
             if not color_frame or not depth_frame:
-                self.get_logger().warn("Missing color or depth frame")
+                self.logger.warning("Missing color or depth frame")
                 return
             
             # Convert to numpy arrays
@@ -126,10 +129,10 @@ class RealSenseD415Node(Node):
             
             self.frame_count += 1
             if self.frame_count % 30 == 0:
-                self.get_logger().info(f"Published {self.frame_count} frame pairs")
+                self.logger.info(f"Published {self.frame_count} frame pairs")
         
         except Exception as e:
-            self.get_logger().error(f"Capture error: {e}")
+            self.logger.error(f"Capture error: {e}")
 
     def create_camera_info(self, intrinsics, timestamp, frame_id):
         """Create CameraInfo message from RealSense intrinsics (ROS2 Jazzy compatible)"""
@@ -168,7 +171,7 @@ class RealSenseD415Node(Node):
     def destroy_node(self):
         try:
             self.pipeline.stop()
-            self.get_logger().info("RealSense pipeline stopped")
+            self.logger.info("RealSense pipeline stopped")
         except Exception:
             pass
         super().destroy_node()
@@ -181,7 +184,7 @@ def main(args=None):
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("Shutting down RealSense D415 node")
+        node.logger.info("Shutting down RealSense D415 node")
     finally:
         node.destroy_node()
         rclpy.shutdown()

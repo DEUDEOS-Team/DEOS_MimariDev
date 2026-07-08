@@ -7,6 +7,8 @@ from std_msgs.msg import Bool, Float32
 
 from deos_algorithms.ros_topic_layout import build_deos_topics
 
+from deos_logging.logger import DeosLogger
+
 
 class VehicleControllerNode(Node):
     PERCEPTION_TIMEOUT_S = 0.2
@@ -14,6 +16,7 @@ class VehicleControllerNode(Node):
 
     def __init__(self):
         super().__init__("vehicle_controller_node")
+        self.logger = DeosLogger(self.get_logger(), "vehicle_controller_node")
 
         self.declare_parameter("max_speed_mps", 3.0)
         self.declare_parameter("max_steer_rads", 1.0)
@@ -100,7 +103,7 @@ class VehicleControllerNode(Node):
         if bool(self.get_parameter("use_lane_control").value):
             self.create_subscription(Float32, str(self.get_parameter("lane_steering_topic").value), self._lane_steer_cb, 10)
             self.create_subscription(Float32, str(self.get_parameter("lane_speed_topic").value), self._lane_speed_cb, 10)
-            self.get_logger().info(
+            self.logger.info(
                 "lane_control enabled — "
                 f"steer={str(self.get_parameter('lane_steering_topic').value)}, "
                 f"speed={str(self.get_parameter('lane_speed_topic').value)}"
@@ -109,19 +112,19 @@ class VehicleControllerNode(Node):
         if bool(self.get_parameter("subscribe_hardware_motion_enable").value):
             hw_topic = str(self.get_parameter("hardware_motion_enable_topic").value)
             self.create_subscription(Bool, hw_topic, self._hw_motion_enable_cb, 10)
-            self.get_logger().info(f"hardware motion_enable subscription enabled on {hw_topic}")
+            self.logger.info(f"hardware motion_enable subscription enabled on {hw_topic}")
 
         if bool(self.get_parameter("subscribe_autonomy_enable").value):
             at = str(self.get_parameter("autonomy_enable_topic").value)
             self.create_subscription(Bool, at, self._autonomy_enable_cb, 10)
-            self.get_logger().info(f"autonomy_enable subscription enabled on {at}")
+            self.logger.info(f"autonomy_enable subscription enabled on {at}")
 
         if bool(self.get_parameter("subscribe_failsafe").value):
             fet = _T["failsafe_out_emergency_stop"]
             fst = _T["failsafe_out_speed_cap"]
             self.create_subscription(Bool, fet, self._failsafe_estop_cb, 10)
             self.create_subscription(Float32, fst, self._failsafe_speed_cap_cb, 10)
-            self.get_logger().info(f"failsafe topics: {fet}, {fst}")
+            self.logger.info(f"failsafe topics: {fet}, {fst}")
 
         self.create_subscription(
             Float32,
@@ -137,7 +140,7 @@ class VehicleControllerNode(Node):
         )
 
         self.create_timer(0.05, self._tick)
-        self.get_logger().info(
+        self.logger.info(
             "vehicle_controller_node ready — "
             f"max_speed={self._max_speed} m/s, max_steer={self._max_steer} rad/s, "
             f"estop_pulse_count={int(self.get_parameter('safety_emergency_stop_pulse_count').value)}, "
@@ -303,11 +306,11 @@ class VehicleControllerNode(Node):
         if self._green_elapsed_s >= 0.0:
             elapsed = self._green_elapsed_s
             if elapsed > 30.0 and speed_ratio < 0.05:
-                self.get_logger().warn(
+                self.logger.warning(
                     f"YESIL_ISIK_GECIKME: {elapsed:.1f}s gecti, arac duruyor — sartname -20p riski"
                 )
             elif elapsed > 5.0 and speed_ratio < 0.05:
-                self.get_logger().debug(
+                self.logger.debug(
                     f"YESIL_ISIK_GECIKME: {elapsed:.1f}s gecti, arac duruyor — sartname +20p bandi"
                 )
 

@@ -6,6 +6,8 @@ from rclpy.node import Node
 
 from deos_algorithms.ros_topic_layout import build_deos_topics
 
+from deos_logging.logger import DeosLogger
+
 
 class FinalOdomNode(Node):
     """
@@ -17,6 +19,7 @@ class FinalOdomNode(Node):
 
     def __init__(self):
         super().__init__("final_odom_node")
+        self.logger = DeosLogger(self.get_logger(), "final_odom_node")
         self.declare_parameter("deos_root", "/deos")
         _T = build_deos_topics(str(self.get_parameter("deos_root").value))
         self.declare_parameter("ekf_odom_topic", _T["localization_odom_ekf"])
@@ -34,7 +37,7 @@ class FinalOdomNode(Node):
         self._pub = self.create_publisher(Odometry, str(self.get_parameter("out_topic").value), 10)
 
         self.create_timer(0.02, self._tick)  # 50 Hz
-        self.get_logger().info(
+        self.logger.info(
             "final_odom_node ready — "
             f"ekf={str(self.get_parameter('ekf_odom_topic').value)}, "
             f"icp={str(self.get_parameter('icp_odom_topic').value)} -> "

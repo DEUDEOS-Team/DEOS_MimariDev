@@ -12,6 +12,8 @@ from std_msgs.msg import String
 
 from deos_algorithms.ros_topic_layout import build_deos_topics
 
+from deos_logging.logger import DeosLogger
+
 # ---------------------------------------------------------------------------
 # DEOS sınıf adı haritası (COCO indeksi → DEOS dahili adı)
 # Özel model kullanılıyorsa bu eşleme devreye girmez; class_names doğrudan kullanılır.
@@ -63,6 +65,7 @@ def _map_coco(class_id: int, class_name: str) -> str:
 class StereoDetectorNode(Node):
     def __init__(self):
         super().__init__("stereo_detector_node")
+        self.logger = DeosLogger(self.get_logger(), "stereo_detector_node")
 
         self.declare_parameter("image_width", 640)
         self.declare_parameter("image_height", 480)
@@ -100,7 +103,7 @@ class StereoDetectorNode(Node):
         if model_path:
             self._load_model(model_path, backend)
         else:
-            self.get_logger().warn(
+            self.logger.warning(
                 "model_path parametresi boş — YOLO devre dışı. "
                 "Başlatmak için: ros2 run ... --ros-args -p model_path:=/path/to/model.pt"
             )
@@ -109,7 +112,7 @@ class StereoDetectorNode(Node):
         self.create_subscription(Image, str(self.get_parameter("depth_topic").value), self._depth_cb, 10)
         self._pub = self.create_publisher(String, str(self.get_parameter("stereo_detections_topic").value), 10)
 
-        self.get_logger().info(
+        self.logger.info(
             f"stereo_detector_node ready — backend={self._backend or 'none'}, "
             f"model={'loaded' if self._model or self._hailo_runner else 'NOT loaded'}"
         )
@@ -122,7 +125,7 @@ class StereoDetectorNode(Node):
         if backend == "hailo":
             self._load_hailo(path)
             if self._hailo_runner is None:
-                self.get_logger().warn("Hailo yüklenemedi, ultralytics deneniyor...")
+                self.logger.warning("Hailo yüklenemedi, ultralytics deneniyor...")
                 self._load_ultralytics(path)
         else:
             self._load_ultralytics(path)
@@ -143,24 +146,24 @@ class StereoDetectorNode(Node):
                 "hef": hef,
             }
             self._backend = "hailo"
-            self.get_logger().info(f"Hailo-8 HEF yüklendi: {hef_path}")
+            self.logger.info(f"Hailo-8 HEF yüklendi: {hef_path}")
         except ImportError:
-            self.get_logger().warn("hailo_platform paketi bulunamadı (sadece Raspberry Pi + Hailo-8'de mevcut)")
+            self.logger.warning("hailo_platform paketi bulunamadı (sadece Raspberry Pi + Hailo-8'de mevcut)")
         except Exception as e:
-            self.get_logger().error(f"Hailo yükleme hatası: {e}")
+            self.logger.error(f"Hailo yükleme hatası: {e}")
 
     def _load_ultralytics(self, path: str) -> None:
         try:
             from ultralytics import YOLO
             self._model = YOLO(path)
             self._backend = "ultralytics"
-            self.get_logger().info(f"Ultralytics YOLO yüklendi: {path}")
+            self.logger.info(f"Ultralytics YOLO yüklendi: {path}")
         except ImportError:
-            self.get_logger().error(
+            self.logger.error(
                 "ultralytics paketi bulunamadı. Kurmak için: pip install ultralytics"
             )
         except Exception as e:
-            self.get_logger().error(f"Ultralytics yükleme hatası: {e}")
+            self.logger.error(f"Ultralytics yükleme hatası: {e}")
 
     # ------------------------------------------------------------------
     # ROS callbacks
@@ -172,13 +175,13 @@ class StereoDetectorNode(Node):
             self._depth_img = raw.reshape(msg.height, msg.width).astype(np.float32) / 1000.0
             self._depth_stamp = time.monotonic()
         except Exception as e:
-            self.get_logger().error(f"depth convert: {e}")
+            self.logger.error(f"depth convert: {e}")
 
     def _rgb_cb(self, msg: Image) -> None:
         try:
             frame = self._bridge.imgmsg_to_cv2(msg, "bgr8")
         except Exception as e:
-            self.get_logger().error(f"rgb convert: {e}")
+            self.logger.error(f"rgb convert: {e}")
             return
 
         dets = self._yolo_detect(frame)
@@ -233,7 +236,7 @@ class StereoDetectorNode(Node):
                     out.append({"class_name": cls_name, "confidence": conf, "bbox": (x1, y1, x2, y2)})
             return out
         except Exception as e:
-            self.get_logger().error(f"ultralytics infer: {e}")
+            self.logger.error(f"ultralytics infer: {e}")
             return []
 
     def _infer_hailo(self, frame: np.ndarray) -> list[dict]:
@@ -266,7 +269,7 @@ class StereoDetectorNode(Node):
             preds = raw_output[out_name][0]  # shape: [n_boxes, 5+n_cls] or YOLO native format
             return self._decode_yolo_output(preds, orig_w=frame.shape[1], orig_h=frame.shape[0], model_w=w, model_h=h)
         except Exception as e:
-            self.get_logger().error(f"hailo infer: {e}")
+            self.logger.error(f"hailo infer: {e}")
             return []
 
     def _decode_yolo_output(

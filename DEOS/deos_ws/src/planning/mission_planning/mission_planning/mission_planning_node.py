@@ -20,6 +20,7 @@ from deos_algorithms.route_planner import (
 )
 from deos_algorithms.waypoint_manager import GpsPosition
 
+from deos_logging.logger import DeosLogger
 
 GPS_TIMEOUT_SLOW_S = 2.0
 GPS_TIMEOUT_STOP_S = 5.0
@@ -53,6 +54,7 @@ def _bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 class MissionPlanningNode(Node):
     def __init__(self):
         super().__init__("mission_planning_node")
+        self.logger = DeosLogger(self.get_logger(), "mission_planning_node")
 
         self.declare_parameter("deos_root", "/deos")
         _T = build_deos_topics(str(self.get_parameter("deos_root").value))
@@ -100,7 +102,7 @@ class MissionPlanningNode(Node):
             reader = GeoJsonMissionReader()
             self._base_plan = reader.read_file(mission_file)
         else:
-            self.get_logger().warn("mission_file parametresi boş — waypoint takibi pasif")
+            self.logger.warning("mission_file parametresi boş — waypoint takibi pasif")
 
         # Yol graph'ı (lane centerlines) — node/edge'ler açılışta otomatik çıkarılır.
         self._route_graph = None
@@ -110,11 +112,11 @@ class MissionPlanningNode(Node):
                 self._route_graph = build_graph_from_centerlines_geojson(gj, coord_round_decimals=centerlines_round)
                 n_nodes = len(self._route_graph.nodes)
                 n_edges = sum(len(v) for v in self._route_graph.adj.values())
-                self.get_logger().info(
+                self.logger.info(
                     f"Centerlines yüklendi: nodes={n_nodes} edges={n_edges} — {centerlines_file}"
                 )
             except Exception as e:
-                self.get_logger().error(f"Centerlines yüklenemedi: {centerlines_file} — {e}")
+                self.logger.error(f"Centerlines yüklenemedi: {centerlines_file} — {e}")
 
         # Routing: Mission noktalarını graph'a snap edip Dijkstra ile bir route waypoint listesi üret.
         self._blocked_edges: set[tuple[int, int]] = set()
@@ -133,11 +135,11 @@ class MissionPlanningNode(Node):
                         self._route_graph,
                         tunnel_mandatory=self._tunnel_mandatory,
                     )
-                    self.get_logger().info(
+                    self.logger.info(
                         f"Routing aktif: {len(self._base_plan)} hedef -> {len(plan)} route waypoint"
                     )
                 except Exception as e:
-                    self.get_logger().error(f"Routing başarısız, mission plan kullanılacak — {e}")
+                    self.logger.error(f"Routing başarısız, mission plan kullanılacak — {e}")
                     plan = self._base_plan
             else:
                 plan = route_mission_plan_without_graph(
@@ -145,11 +147,11 @@ class MissionPlanningNode(Node):
                     reorder_checkpoints_by_nearest=self._mission_only_reorder,
                     keep_park_last=self._mission_only_keep_park_last,
                 )
-                self.get_logger().info(
+                self.logger.info(
                     f"Mission-only routing aktif: {len(self._base_plan)} hedef -> {len(plan)} waypoint"
                 )
             self._manager = MissionManager(plan)
-            self.get_logger().info(f"Görev yüklendi: {len(plan)} waypoint — {mission_file}")
+            self.logger.info(f"Görev yüklendi: {len(plan)} waypoint — {mission_file}")
 
         self._heading_deg = 0.0
         self._gps_stamp: float = 0.0
@@ -416,17 +418,17 @@ class MissionPlanningNode(Node):
                     self._last_turn_replan_sig = sig
                     self._last_turn_replan_t = now_m
                     wp_state, mission_dec = self._manager.update(pos, now_s=time.monotonic())
-                    self.get_logger().warn(
+                    self.logger.warning(
                         f"REPLAN: ok -> new_route_waypoints={len(new_plan.points)} blocked_edges={len(self._blocked_edges)} turn_blocks={len(turn_blocks)}"
                     )
                 else:
                     # No route under constraints: keep last good plan/manager, keep moving.
-                    self.get_logger().error(
+                    self.logger.error(
                         f"REPLAN: no_route (kept last plan) blocked_edges={len(self._blocked_edges)} turn_blocks={len(turn_blocks)}"
                     )
             except Exception as e:
                 if str(e) != "replan debounce":
-                    self.get_logger().error(f"REPLAN başarısız: {e}")
+                    self.logger.error(f"REPLAN başarısız: {e}")
 
         steer = float(wp_state.steering_ref)
         base_speed = float(wp_state.speed_limit_ratio) * float(mission_dec.speed_cap_ratio)

@@ -9,10 +9,13 @@ from std_msgs.msg import String
 
 from deos_algorithms.ros_topic_layout import build_deos_topics
 
+from deos_logging.logger import DeosLogger
+
 
 class LidarObstacleNode(Node):
     def __init__(self):
         super().__init__("lidar_obstacle_node")
+        self.logger = DeosLogger(self.get_logger(), "lidar_obstacle_node")
 
         self.declare_parameter("cluster_epsilon_m", 0.5)
         self.declare_parameter("cluster_min_points", 5)
@@ -32,7 +35,7 @@ class LidarObstacleNode(Node):
             PointCloud2, str(self.get_parameter("cloud_topic").value), self._cloud_cb, 10
         )
         self._pub = self.create_publisher(String, str(self.get_parameter("lidar_obstacles_topic").value), 10)
-        self.get_logger().info("lidar_obstacle_node ready")
+        self.logger.info("lidar_obstacle_node ready")
 
     def _cloud_cb(self, msg: PointCloud2) -> None:
         pts = self._unpack_xyz(msg)
@@ -123,7 +126,7 @@ class LidarObstacleNode(Node):
                 pts[i, 2] = struct.unpack_from("f", data, base + oz)[0]
             return pts[np.isfinite(pts).all(axis=1)]
         except Exception as e:
-            self.get_logger().error(f"PointCloud2 unpack: {e}")
+            self.logger.error(f"PointCloud2 unpack: {e}")
             return None
 
 

@@ -14,6 +14,8 @@ from deos_failsafe.decision_engine_core import FailSafeDecisionCore
 from deos_failsafe.planning_validator import PlanningValidator
 from deos_failsafe.safety_types import ControlStatus, FailSafeCommand, Health, PlanStatus
 
+from deos_logging.logger import DeosLogger
+
 
 class FailsafeSupervisorNode(Node):
     """
@@ -26,6 +28,7 @@ class FailsafeSupervisorNode(Node):
 
     def __init__(self) -> None:
         super().__init__("failsafe_supervisor_node")
+        self.logger = DeosLogger(self.get_logger(), "failsafe_supervisor_node")
 
         self.declare_parameter("deos_root", "/deos")
         _T = build_deos_topics(str(self.get_parameter("deos_root").value))
@@ -132,7 +135,7 @@ class FailsafeSupervisorNode(Node):
         self._pub_status = self.create_publisher(String, t_out_diag, 10)
 
         self.create_timer(0.05, self._tick)
-        self.get_logger().info(
+        self.logger.info(
             f"failsafe_supervisor_node ready — deos_root={str(self.get_parameter('deos_root').value)!r} "
             f"publishes {t_out_estop}, {t_out_cap}, {t_out_diag}; subscribes {t_in_reset}"
         )
@@ -175,13 +178,13 @@ class FailsafeSupervisorNode(Node):
     def _on_manual_reset(self, msg: Bool) -> None:
         if bool(msg.data):
             self._core.fsm.manual_reset()
-            self.get_logger().warn("Fail-safe FSM manuel reset")
+            self.logger.warning("Fail-safe FSM manuel reset")
 
     def _on_lane_violation(self, msg: Bool) -> None:
         prev = self._lane_violation_active
         self._lane_violation_active = bool(msg.data)
         if self._lane_violation_active and not prev:
-            self.get_logger().warn(
+            self.logger.warning(
                 f"SERIT_IHLALI başladı — toplam {self._lane_violation_count} ihlal, "
                 f"{self._lane_violation_seconds:.1f}s"
             )

@@ -7,6 +7,8 @@ from std_msgs.msg import Bool, Float32
 
 from deos_algorithms.ros_topic_layout import build_deos_topics
 
+from deos_logging.logger import DeosLogger
+
 
 def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, float(x)))
@@ -24,6 +26,7 @@ class Stm32BridgeNode(Node):
 
     def __init__(self):
         super().__init__("stm32_bridge_node")
+        self.logger = DeosLogger(self.get_logger(), "stm32_bridge_node")
 
         self.declare_parameter("deos_root", "/deos")
         _T = build_deos_topics(str(self.get_parameter("deos_root").value))
@@ -61,7 +64,7 @@ class Stm32BridgeNode(Node):
         self.create_subscription(Bool, motion_topic, self._motion_cb, 10)
         self.create_subscription(Bool, autonomy_topic, self._autonomy_cb, 10)
 
-        self.get_logger().info(
+        self.logger.info(
             "stm32_bridge_node ready — "
             f"cmd_vel={cmd_topic} -> "
             f"speed_delta={str(self.get_parameter('speed_delta_topic').value)}, "

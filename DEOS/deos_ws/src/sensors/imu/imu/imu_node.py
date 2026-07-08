@@ -8,10 +8,13 @@ import serial
 
 from deos_algorithms.ros_topic_layout import build_deos_topics
 
+from deos_logging.logger import DeosLogger
+
 
 class IMUNode(Node):
     def __init__(self):
         super().__init__('imu_node')
+        self.logger = DeosLogger(self.get_logger(), "imu_node")
         
         # Parameters
         self.declare_parameter('port', '/dev/ttyUSB1')
@@ -36,9 +39,9 @@ class IMUNode(Node):
         # Serial setup
         try:
             self.ser = serial.Serial(port, baudrate, timeout=1)
-            self.get_logger().info(f"IMU connected on {port} @ {baudrate} baud (type: {self.imu_type})")
+            self.logger.info(f"IMU connected on {port} @ {baudrate} baud (type: {self.imu_type})")
         except Exception as e:
-            self.get_logger().error(f"Failed to open IMU port: {e}")
+            self.logger.error(f"Failed to open IMU port: {e}")
             self.ser = None
             return
         
@@ -47,7 +50,7 @@ class IMUNode(Node):
         
         # Timer for read loop
         self.timer = self.create_timer(0.01, self.timer_callback)  # 100 Hz
-        self.get_logger().info("IMU node started")
+        self.logger.info("IMU node started")
 
     def timer_callback(self):
         if self.ser is None or not self.ser.is_open:
@@ -117,7 +120,7 @@ class IMUNode(Node):
             self.publisher_.publish(imu_msg)
         
         except Exception as e:
-            self.get_logger().error(f"IMU parsing error: {e}")
+            self.logger.error(f"IMU parsing error: {e}")
 
     def parse_mpu9250(self, line):
         """Parse MPU9250 format: ax,ay,az,gx,gy,gz"""

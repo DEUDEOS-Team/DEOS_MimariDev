@@ -7,10 +7,13 @@ from datetime import datetime
 
 from deos_algorithms.ros_topic_layout import build_deos_topics
 
+from deos_logging.logger import DeosLogger
+
 
 class GPSNode(Node):
     def __init__(self):
         super().__init__('gps_node')
+        self.logger = DeosLogger(self.get_logger(), "gps_node")
         
         # Parameters
         self.declare_parameter('port', '/dev/ttyUSB0')
@@ -27,9 +30,9 @@ class GPSNode(Node):
         # Serial setup
         try:
             self.ser = serial.Serial(port, baudrate, timeout=1)
-            self.get_logger().info(f"GPS connected on {port} @ {baudrate} baud")
+            self.logger.info(f"GPS connected on {port} @ {baudrate} baud")
         except Exception as e:
-            self.get_logger().error(f"Failed to open GPS port: {e}")
+            self.logger.error(f"Failed to open GPS port: {e}")
             self.ser = None
             return
         
@@ -38,7 +41,7 @@ class GPSNode(Node):
         
         # Timer for read loop
         self.timer = self.create_timer(0.1, self.timer_callback)
-        self.get_logger().info("GPS node started")
+        self.logger.info("GPS node started")
 
     def timer_callback(self):
         if self.ser is None or not self.ser.is_open:
@@ -65,11 +68,11 @@ class GPSNode(Node):
             
             # Check fix quality
             if hasattr(msg, 'fix_stat') and msg.fix_stat == '0':
-                self.get_logger().warn("GPS: No fix")
+                self.logger.warning("GPS: No fix")
                 return
             
             if hasattr(msg, 'gps_qual') and msg.gps_qual == '0':
-                self.get_logger().warn("GPS: Invalid data")
+                self.logger.warning("GPS: Invalid data")
                 return
             
             # Extract latitude and longitude
@@ -95,10 +98,10 @@ class GPSNode(Node):
                 nav_msg.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
                 
                 self.publisher_.publish(nav_msg)
-                self.get_logger().debug(f"GPS: Lat={lat}, Lon={lon}, Alt={alt}")
+                self.logger.debug(f"GPS: Lat={lat}, Lon={lon}, Alt={alt}")
         
         except Exception as e:
-            self.get_logger().error(f"GPS parsing error: {e}")
+            self.logger.error(f"GPS parsing error: {e}")
 
     def destroy_node(self):
         if self.ser is not None:

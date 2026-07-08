@@ -19,6 +19,8 @@ from deos_algorithms.slalom_logic import SlalomLogic
 from deos_algorithms.traffic_light_logic import LightColor, TrafficLightLogic
 from deos_algorithms.traffic_sign_logic import TrafficSignLogic
 
+from deos_logging.logger import DeosLogger
+
 
 class PerceptionFusionNode(Node):
     STEREO_TIMEOUT_S = 0.5
@@ -27,6 +29,7 @@ class PerceptionFusionNode(Node):
 
     def __init__(self):
         super().__init__("perception_fusion_node")
+        self.logger = DeosLogger(self.get_logger(), "perception_fusion_node")
 
         self.declare_parameter("deos_root", "/deos")
         _T = build_deos_topics(str(self.get_parameter("deos_root").value))
@@ -164,7 +167,7 @@ class PerceptionFusionNode(Node):
         )
 
         self.create_timer(0.05, self._tick)  # 20 Hz
-        self.get_logger().info(
+        self.logger.info(
             "perception_fusion_node ready — "
             f"STM32 motion topic={motion_topic} (Bool: false=STOP algorithms, true=RUN)"
         )
@@ -199,7 +202,7 @@ class PerceptionFusionNode(Node):
             ]
             self._stereo_stamp = time.monotonic()
         except Exception as e:
-            self.get_logger().error(f"stereo parse: {e}")
+            self.logger.error(f"stereo parse: {e}")
 
     def _lidar_cb(self, msg: String) -> None:
         try:
@@ -216,7 +219,7 @@ class PerceptionFusionNode(Node):
             ]
             self._lidar_stamp = time.monotonic()
         except Exception as e:
-            self.get_logger().error(f"lidar parse: {e}")
+            self.logger.error(f"lidar parse: {e}")
 
     def _imu_cb(self, msg: Imu) -> None:
         q = msg.orientation
