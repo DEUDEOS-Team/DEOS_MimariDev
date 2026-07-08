@@ -32,7 +32,7 @@ SPEC = HealthSpec(
         "/stereo_detector_node",
         "/lidar_obstacle_node",
         "/perception_fusion_node",
-        "/pcl_localization_node",
+        "/pcl_localization",
         "/mission_planning_node",
         "/vehicle_controller_node",
         "/failsafe_supervisor_node",
