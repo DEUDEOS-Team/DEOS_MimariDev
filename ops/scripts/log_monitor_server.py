@@ -275,8 +275,15 @@ sidebar.addEventListener('click', e => {
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function parseLine(raw) {
-  const m = raw.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)? \| (\w+) \| (.*)$/s);
-  if (m) return [m[1], m[2], m[3]];
+  // DeosLogger: "2026-07-11 14:22:01.234 | INFO | message"
+  const m1 = raw.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)? \| (\w+) \| (.*)$/s);
+  if (m1) return [m1[1], m1[2], m1[3]];
+  // ROS2 console: "[node-N] [INFO] [1234567.89] [logger]: message"
+  const m2 = raw.match(/^\[([^\]]+)\] \[(INFO|WARN|WARNING|ERROR|DEBUG|FATAL)\] \[\d+[\.\d]*\] \[([^\]]+)\]: (.*)$/s);
+  if (m2) {
+    const lvl = m2[2] === 'FATAL' ? 'CRITICAL' : m2[2] === 'WARN' ? 'WARNING' : m2[2];
+    return ['', lvl, `[${m2[1]}] ${m2[4]}`];
+  }
   return ['', 'INFO', raw];
 }
 

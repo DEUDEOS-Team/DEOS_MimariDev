@@ -128,8 +128,8 @@ class RealSenseD415Node(Node):
             self.depth_info_publisher.publish(self.create_camera_info(self.depth_intrinsics, timestamp, "camera_depth_frame"))
             
             self.frame_count += 1
-            if self.frame_count % 30 == 0:
-                self.logger.info(f"Published {self.frame_count} frame pairs")
+            if self.frame_count % 300 == 0:
+                self.logger.debug(f"Published {self.frame_count} frame pairs")
         
         except Exception as e:
             self.logger.error(f"Capture error: {e}")
