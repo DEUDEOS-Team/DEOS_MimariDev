@@ -32,7 +32,7 @@ from cv_bridge import CvBridge
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 
-TOPIC   = os.environ.get("DEOS_CAM_TOPIC",   "/deos/sensors/camera/color")
+TOPIC   = os.environ.get("DEOS_CAM_TOPIC",   "/deos/sensors/camera/color/image_raw")
 PORT    = int(os.environ.get("DEOS_CAM_PORT",    "8080"))
 FPS     = int(os.environ.get("DEOS_CAM_FPS",     "30"))
 QUALITY = int(os.environ.get("DEOS_CAM_QUALITY", "75"))
