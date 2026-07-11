@@ -12,6 +12,7 @@ services:
       - ./bags:/ros2_ws/bags
       - ./models:/ros2_ws/models                    # HEF model dosyaları (detection.hef, lane_seg.hef)
       - ./missions:/ros2_ws/missions                # GeoJSON görev dosyaları
+      - ./logs:/ros2_ws/logs                        # Node log dosyaları (log_monitor_server.py ile izlenir)
     working_dir: /ros2_ws
     command: bash
     stdin_open: true
