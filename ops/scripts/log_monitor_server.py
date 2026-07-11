@@ -334,8 +334,7 @@ body { background-color: #131313; }
 </footer>
 
 <script>
-const CAMERA_TOPIC = '/deos/sensors/camera/color';
-const CAMERA_URL   = `http://${window.location.hostname}:8080/stream?topic=${CAMERA_TOPIC}`;
+const CAMERA_URL = `http://${window.location.hostname}:8080/stream`;
 
 let autoScroll = true, activeNode = '', filterRe = null;
 let total = 0, lpsCount = 0;
@@ -392,6 +391,27 @@ cameraFeed.onerror = () => {
   cameraDot.className = 'w-1.5 h-1.5 rounded-full bg-status-error animate-pulse';
 };
 cameraFsBtn.addEventListener('click', () => window.open(CAMERA_URL, '_blank'));
+
+// Snapshot test - kamera online mi kontrol et
+function checkCamera() {
+  const img = new Image();
+  img.onload = () => {
+    cameraPlaceholder.style.display = 'none';
+    cameraFeed.style.display = 'block';
+    cameraDot.className = 'w-1.5 h-1.5 rounded-full bg-status-success animate-pulse';
+    $('cam-fps').textContent = `${FPS_TARGET} FPS`;
+    $('cam-fps').className = 'font-mono-code text-mono-code text-status-success';
+  };
+  img.onerror = () => {
+    cameraFeed.style.display = 'none';
+    cameraPlaceholder.style.display = 'flex';
+    cameraDot.className = 'w-1.5 h-1.5 rounded-full bg-status-error animate-pulse';
+    $('cam-fps').textContent = '-- FPS';
+    $('cam-fps').className = 'font-mono-code text-mono-code text-text-muted';
+  };
+  img.src = `http://${window.location.hostname}:8080/snapshot?t=${Date.now()}`;
+}
+const FPS_TARGET = 30;
 
 // ── Filter ──
 filterInput.addEventListener('input', () => {
