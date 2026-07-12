@@ -1,0 +1,15 @@
+[Unit]
+Description=DEOS Log Monitor Web Server
+After=network.target
+
+[Service]
+Type=simple
+User=__USER__
+Environment=DEOS_LOG_ROOT=__REPO_ROOT__/logs
+Environment=DEOS_MONITOR_PORT=9000
+ExecStart=/usr/bin/python3 __REPO_ROOT__/ops/scripts/log_monitor_server.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -11,6 +11,8 @@ services:
           colcon build;
         fi;
         source /ros2_ws/install/setup.bash;
+        echo '[deos] Kamera stream sunucusu başlatılıyor...';
+        python3 /ros2_ws/ops/scripts/camera_stream_server.py &
         echo '[deos] bringup başlıyor: ros2 launch vehicle_bringup main.launch.py';
         exec ros2 launch vehicle_bringup main.launch.py
       "
