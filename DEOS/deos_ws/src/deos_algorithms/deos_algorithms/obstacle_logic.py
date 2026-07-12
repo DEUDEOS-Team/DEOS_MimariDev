@@ -41,13 +41,13 @@ DYNAMIC_SLOW_DISTANCE_M = 10.0
 DYNAMIC_SLOW_SPEED_CAP = 0.4
 DYNAMIC_STOP_DISTANCE_M = 5.0
 DYNAMIC_CLEAR_FRAMES = 3
-STATIC_LANE_CHANGE_TRIGGER_M = 3.0
+STATIC_LANE_CHANGE_TRIGGER_M = 7.0   # şerit değişimi için erken tetikle (eski: 3.0)
 STATIC_LANE_CHANGE_SPEED_CAP = 0.35
 STATIC_EMERGENCY_DISTANCE_M = 1.5
 
 # Sıralı statik engeller için kaçınma stabilizasyonu (zigzag azaltma)
-STATIC_AVOID_COMMIT_FRAMES = 6  # yön kararı en az bu kadar frame korunur
-STATIC_AVOID_CLEAR_DISTANCE_M = 4.5  # en yakın statik engel bu mesafeden uzaksa commit bırak
+STATIC_AVOID_COMMIT_FRAMES = 15  # şerit değişimi tamamlanana kadar yön korunur (eski: 6)
+STATIC_AVOID_CLEAR_DISTANCE_M = 6.0  # engel bu mesafeden uzaklaşınca commit bırak (eski: 4.5)
 STATIC_AVOID_SWITCH_MARGIN_M = 0.6  # zıt tarafa geçmek için "daha belirgin" yakınlık farkı
 
 # Dinamik engelde dur-bekle sonrası kaçınma geçişi için minimum bekleme süresi.

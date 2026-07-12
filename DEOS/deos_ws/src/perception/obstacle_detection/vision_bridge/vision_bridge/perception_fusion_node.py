@@ -426,8 +426,10 @@ class PerceptionFusionNode(Node):
             )
 
         # Statik kaçınma override (lane ile clamp/disable)
+        # steer_bias ±0.6: komşu şeride geçiş için yeterli steer gücü
+        # lane clamp hedef konumu şerit/yol sınırlarına göre kırpar
         if obs_state.suggest_lane_change and not obs_state.road_blocked:
-            steer_bias = -0.35 if obs_state.avoidance_direction == "left" else 0.35
+            steer_bias = -0.6 if obs_state.avoidance_direction == "left" else 0.6
             candidates.append(
                 Candidate(
                     name="static_avoid",
