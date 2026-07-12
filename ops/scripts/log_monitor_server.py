@@ -22,7 +22,7 @@ import os
 import queue
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -655,7 +655,7 @@ def main() -> None:
 
     BoundHandler.watcher = watcher
 
-    server = HTTPServer(("0.0.0.0", PORT), BoundHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), BoundHandler)
     raspi_ip = os.popen("hostname -I 2>/dev/null | awk '{print $1}'").read().strip() or "<raspi-ip>"
     print(f"DEOS Log Monitor baslatildi")
     print(f"  Yerel erisim : http://localhost:{PORT}")
