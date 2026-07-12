@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import time
 from typing import Optional
 
@@ -100,13 +101,18 @@ class StereoDetectorNode(Node):
         self._hailo_runner = None
         model_path = str(self.get_parameter("model_path").value)
         backend = str(self.get_parameter("model_backend").value)
-        if model_path:
-            self._load_model(model_path, backend)
-        else:
+        if not model_path:
             self.logger.warning(
                 "model_path parametresi boş — YOLO devre dışı. "
-                "Başlatmak için: ros2 run ... --ros-args -p model_path:=/path/to/model.pt"
+                "Başlatmak için: ros2 run ... --ros-args -p model_path:=/path/to/model"
             )
+        elif not os.path.exists(model_path):
+            self.logger.warning(
+                f"Model dosyası bulunamadı: {model_path} — YOLO devre dışı. "
+                "models/ klasörüne detection.hef (Hailo) veya .pt (ultralytics) kopyalayın."
+            )
+        else:
+            self._load_model(model_path, backend)
 
         self.create_subscription(Image, str(self.get_parameter("rgb_topic").value), self._rgb_cb, 10)
         self.create_subscription(Image, str(self.get_parameter("depth_topic").value), self._depth_cb, 10)

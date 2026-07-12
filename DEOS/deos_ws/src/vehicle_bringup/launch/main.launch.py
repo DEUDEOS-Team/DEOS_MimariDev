@@ -104,7 +104,7 @@ def generate_launch_description():
     stereo_model_path_arg = DeclareLaunchArgument(
         "stereo_model_path",
         default_value="/ros2_ws/models/detection.hef",
-        description="Hailo AI HAT üzerindeki YOLOv8 object detection HEF model dosyasının tam yolu",
+        description="YOLOv8 model dosyası tam yolu — Hailo: detection.hef, ultralytics: yolov8n.pt",
     )
 
     lane_model_path_arg = DeclareLaunchArgument(

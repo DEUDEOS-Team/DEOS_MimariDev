@@ -38,7 +38,12 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     pyrealsense2 \
     pyserial \
     pynmea2 \
-    hailort==4.23.0
+    ultralytics || true
+
+# Install hailo_platform for Python 3.12 (built from HailoRT v4.23.0 source)
+COPY deps/hailo_platform /usr/lib/python3/dist-packages/hailo_platform
+COPY DEOS/deos_ws/src/libhailort.so.4.23.0 /usr/lib/libhailort.so.4.23.0
+RUN ln -sf /usr/lib/libhailort.so.4.23.0 /usr/lib/libhailort.so && ldconfig
 
 # 4. Copy only the ROS workspace source (not the full repo) so builder and
 #    runtime volume-mount paths both land at /ros2_ws/src/<package>.
@@ -89,7 +94,12 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     pyrealsense2 \
     pyserial \
     pynmea2 \
-    hailort==4.23.0
+    ultralytics || true
+
+# Install hailo_platform for Python 3.12 (built from HailoRT v4.23.0 source)
+COPY deps/hailo_platform /usr/lib/python3/dist-packages/hailo_platform
+COPY DEOS/deos_ws/src/libhailort.so.4.23.0 /usr/lib/libhailort.so.4.23.0
+RUN ln -sf /usr/lib/libhailort.so.4.23.0 /usr/lib/libhailort.so && ldconfig
 
 # Set environment for ROS - suppress missing package warnings
 RUN echo 'source /opt/ros/jazzy/setup.bash' >> /etc/bash.bashrc && \
