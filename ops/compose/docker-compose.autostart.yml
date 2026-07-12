@@ -3,7 +3,7 @@ services:
     # Autostart profile: container açılınca build + launch
     command: >
       bash -lc "
-        set -euo pipefail;
+        set -eo pipefail;
         source /opt/ros/jazzy/setup.bash;
         cd /ros2_ws;
         if [ ! -f /ros2_ws/install/setup.bash ]; then
@@ -11,9 +11,9 @@ services:
           colcon build;
         fi;
         source /ros2_ws/install/setup.bash;
-        echo '[deos] Kamera stream sunucusu başlatılıyor...';
+        bash /ros2_ws/ops/scripts/startup_check.sh;
         python3 /ros2_ws/ops/scripts/camera_stream_server.py &
-        echo '[deos] bringup başlıyor: ros2 launch vehicle_bringup main.launch.py';
-        exec ros2 launch vehicle_bringup main.launch.py
+        mkdir -p /ros2_ws/logs/ros_console;
+        ros2 launch vehicle_bringup main.launch.py
+          2>&1 | tee /ros2_ws/logs/ros_console/\$(date +%Y-%m-%d_%H-%M-%S).log
       "
-
