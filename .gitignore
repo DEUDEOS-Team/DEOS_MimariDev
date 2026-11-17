@@ -2,6 +2,13 @@
 DEOS/deos_ws/build/
 DEOS/deos_ws/install/
 DEOS/deos_ws/log/
+DEOS/deos_ws/logs/
+DEOS/deos_ws/bags/
+DEOS/deos_ws/src/build/
+DEOS/deos_ws/src/install/
+DEOS/deos_ws/src/log/
+bags/
+logs/
 
 # Python Ön Bellek Dosyaları (İsteğe Bağlı ama Önerilir)
 __pycache__/

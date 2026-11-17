@@ -21,9 +21,9 @@ services:
     
     # Device access for real sensors
     devices:
-      - /dev/bus/usb:/dev/bus/usb           # USB: RealSense D415
-      - /dev/ttyUSB0:/dev/ttyUSB0           # Serial 0: Quectel L86 EVB (GPS)
-      - /dev/ttyUSB1:/dev/ttyUSB1           # Serial 1: IMU (when connected)
+      #- /dev/bus/usb:/dev/bus/usb           # USB: RealSense D415
+      #- /dev/ttyUSB0:/dev/ttyUSB0           # Serial 0: Quectel L86 EVB (GPS)
+      #- /dev/ttyUSB1:/dev/ttyUSB1           # Serial 1: IMU (when connected)
       - /dev/hailo0:/dev/hailo0             # Hailo AI HAT (PCIe)
     
     # Network mode for Ethernet LiDAR (SICK Multiscan165)

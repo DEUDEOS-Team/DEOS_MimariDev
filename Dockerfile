@@ -45,6 +45,8 @@ COPY deps/hailo_platform /usr/lib/python3/dist-packages/hailo_platform
 COPY DEOS/deos_ws/src/libhailort.so.4.23.0 /usr/lib/libhailort.so.4.23.0
 RUN ln -sf /usr/lib/libhailort.so.4.23.0 /usr/lib/libhailort.so && ldconfig
 
+RUN apt-get update && apt-get install -y --no-install-recommends ros-jazzy-vision-msgs && rm -rf /var/lib/apt/lists/*
+
 # 4. Copy only the ROS workspace source (not the full repo) so builder and
 #    runtime volume-mount paths both land at /ros2_ws/src/<package>.
 COPY DEOS/deos_ws/src ./src/
@@ -53,6 +55,8 @@ COPY DEOS/deos_ws/src ./src/
 RUN rosdep update && \
     rosdep install --from-paths src --ignore-src -y \
     --skip-keys "hailort hailo_platform" || true
+
+RUN apt-get update && apt-get install -y --no-install-recommends ros-jazzy-vision-msgs && rm -rf /var/lib/apt/lists/*
 
 # 6. Build workspace — no --symlink-install so install has real files,
 #    not symlinks that break when the build context disappears.
