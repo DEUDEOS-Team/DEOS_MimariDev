@@ -10,6 +10,7 @@ from cv_bridge import CvBridge
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
+from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
 
 from deos_algorithms.ros_topic_layout import build_deos_topics
 
@@ -83,6 +84,7 @@ class StereoDetectorNode(Node):
         self.declare_parameter("rgb_topic", _T["sensors_camera_color"])
         self.declare_parameter("depth_topic", _T["sensors_camera_depth"])
         self.declare_parameter("stereo_detections_topic", _T["perception_stereo_detections"])
+        self.declare_parameter("stereo_detections_2d_topic", _T["perception_stereo_detections_2d"])
 
         self._w = int(self.get_parameter("image_width").value)
         self._h = int(self.get_parameter("image_height").value)
@@ -117,6 +119,10 @@ class StereoDetectorNode(Node):
         self.create_subscription(Image, str(self.get_parameter("rgb_topic").value), self._rgb_cb, 10)
         self.create_subscription(Image, str(self.get_parameter("depth_topic").value), self._depth_cb, 10)
         self._pub = self.create_publisher(String, str(self.get_parameter("stereo_detections_topic").value), 10)
+        # C++ licam_fusion bileşeni için zaman damgalı standart Detection2DArray yayını
+        self._pub_2d = self.create_publisher(
+            Detection2DArray, str(self.get_parameter("stereo_detections_2d_topic").value), 10
+        )
 
         self.logger.info(
             f"stereo_detector_node ready — backend={self._backend or 'none'}, "
@@ -192,6 +198,11 @@ class StereoDetectorNode(Node):
 
         dets = self._yolo_detect(frame)
         result = []
+        det2d_array = Detection2DArray()
+        det2d_array.header = msg.header
+        if not det2d_array.header.frame_id:
+            det2d_array.header.frame_id = "camera_color_frame"
+
         for d in dets:
             x1, y1, x2, y2 = d["bbox"]
             cx = int((x1 + x2) / 2)
@@ -208,7 +219,21 @@ class StereoDetectorNode(Node):
                 }
             )
 
+            det2d = Detection2D()
+            det2d.header = det2d_array.header
+            det2d.id = str(d["class_name"])
+            det2d.bbox.center.position.x = float((x1 + x2) * 0.5)
+            det2d.bbox.center.position.y = float((y1 + y2) * 0.5)
+            det2d.bbox.size_x = float(max(0.0, x2 - x1))
+            det2d.bbox.size_y = float(max(0.0, y2 - y1))
+            hyp = ObjectHypothesisWithPose()
+            hyp.hypothesis.class_id = str(d["class_name"])
+            hyp.hypothesis.score = float(d["confidence"])
+            det2d.results.append(hyp)
+            det2d_array.detections.append(det2d)
+
         self._pub.publish(String(data=json.dumps(result)))
+        self._pub_2d.publish(det2d_array)
 
     # ------------------------------------------------------------------
     # İnference

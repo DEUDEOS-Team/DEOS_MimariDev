@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DEOS - CycloneDDS varsayılan yapılandırması (Shared Memory KAPALI)
+
+  Kullanım:
+    RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    CYCLONEDDS_URI=file:///ros2_ws/config/dds/cyclonedds.xml
+
+  Notlar:
+  - SocketReceiveBufferSize[max] büyük PointCloud2/Image mesajlarında paket
+    kaybını azaltır. Kernel limiti (net.core.rmem_max) düşükse Cyclone hata
+    vermez, alabildiği kadarını alır. Host'ta ops/scripts/setup_dds_sysctl.sh
+    çalıştırılmalıdır.
+  - SHM (iceoryx) için cyclonedds_shm.xml kullanılır (DEOS_DDS_SHM=1).
+-->
+<CycloneDDS xmlns="https://cdds.io/config"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/releases/0.10.x/etc/cyclonedds.xsd">
+  <Domain Id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface autodetermine="true" priority="default" multicast="default"/>
+      </Interfaces>
+      <AllowMulticast>default</AllowMulticast>
+      <MaxMessageSize>65500B</MaxMessageSize>
+    </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <MaxAutoParticipantIndex>120</MaxAutoParticipantIndex>
+    </Discovery>
+    <Internal>
+      <SocketReceiveBufferSize min="default" max="16MB"/>
+    </Internal>
+    <Tracing>
+      <Verbosity>warning</Verbosity>
+      <OutputFile>stderr</OutputFile>
+    </Tracing>
+  </Domain>
+</CycloneDDS>

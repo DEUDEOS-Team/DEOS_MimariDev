@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DEOS - CycloneDDS + iceoryx Shared Memory yapılandırması
+
+  Ön koşul: iox-roudi çalışıyor olmalı (ops/scripts/deos_dds_env.sh, DEOS_DDS_SHM=1
+  olduğunda otomatik başlatır). RouDi yoksa SHM etkin katılımcılar açılamaz;
+  deos_dds_env.sh bu durumda otomatik olarak cyclonedds.xml'e düşer.
+
+  Aynı host'taki okuyucular veriyi iceoryx üzerinden alır, ağdaki (WiFi/rviz)
+  okuyucular yine UDP/RTPS üzerinden alır. Gerçek zero-copy yalnızca sabit
+  boyutlu tipler + C++ loaned message API'si ile gerçekleşir; ayrıntı:
+  docs/CPP_DDS_ALTYAPI.md
+-->
+<CycloneDDS xmlns="https://cdds.io/config"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/releases/0.10.x/etc/cyclonedds.xsd">
+  <Domain Id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface autodetermine="true" priority="default" multicast="default"/>
+      </Interfaces>
+      <AllowMulticast>default</AllowMulticast>
+      <MaxMessageSize>65500B</MaxMessageSize>
+    </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <MaxAutoParticipantIndex>120</MaxAutoParticipantIndex>
+    </Discovery>
+    <Internal>
+      <SocketReceiveBufferSize min="default" max="16MB"/>
+    </Internal>
+    <SharedMemory>
+      <Enable>true</Enable>
+      <LogLevel>warn</LogLevel>
+    </SharedMemory>
+    <Tracing>
+      <Verbosity>warning</Verbosity>
+      <OutputFile>stderr</OutputFile>
+    </Tracing>
+  </Domain>
+</CycloneDDS>

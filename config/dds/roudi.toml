@@ -1,0 +1,40 @@
+# DEOS - iceoryx RouDi mempool yapılandırması (iceoryx 2.0.x, ROS 2 Jazzy)
+#
+# Her mempool "size" baytlık "count" adet chunk ayırır. Mesaj chunk'a sığmazsa
+# bir üst havuz kullanılır; hiçbir havuza sığmazsa publish başarısız olur.
+# Toplam bellek: ~ 1.3 + 2 + 8 + 80 + 96 MB ≈ 190 MB (/dev/shm altında).
+#
+# Boyutları gerçek ölçüme göre güncelleyin:
+#   ros2 topic bw /deos/sensors/camera/color/image_raw
+#   ros2 topic bw /deos/sensors/lidar/cloud_unstructured_fullframe
+# Doluluk takibi:  iox-introspection-client --mempool
+
+[general]
+version = 1
+
+[[segment]]
+
+# Küçük kontrol mesajları (Bool, Float32, Twist, Imu ...)
+[[segment.mempool]]
+size = 128
+count = 10000
+
+# Orta boy (String JSON, Detection2DArray, Odometry ...)
+[[segment.mempool]]
+size = 2048
+count = 1000
+
+# Detection3DArray, MarkerArray, küçük nokta bulutları
+[[segment.mempool]]
+size = 65536
+count = 128
+
+# Kamera: 640x480 bgr8 = 921600 B, depth z16 = 614400 B (+ başlık)
+[[segment.mempool]]
+size = 1048576
+count = 80
+
+# LiDAR PointCloud2 tam kare (SICK multiScan165) - ölçüme göre ayarlanacak
+[[segment.mempool]]
+size = 4194304
+count = 24

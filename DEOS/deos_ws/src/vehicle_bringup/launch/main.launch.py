@@ -3,9 +3,11 @@ from datetime import datetime
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
+from launch_ros.actions import ComposableNodeContainer, Node
+from launch_ros.descriptions import ComposableNode
 from ament_index_python.packages import get_package_share_directory
 
 from deos_algorithms.ros_topic_layout import build_deos_topics
@@ -45,6 +47,67 @@ def _localization_stack_from_deos(context):
             }.items(),
         ),
     ]
+
+
+def _cpp_perception_and_lidar_from_deos(context):
+    """
+    SICK LiDAR sürücüsünü ve C++ algı bileşen konteynerini (`deos_perception_container`)
+    `deos_root` topic ağacıyla başlatır. Yeni C++ algı node'ları aynı konteynere
+    eklendiğinde intra-process zero-copy (`unique_ptr`) otomatik devreye girer.
+    """
+    dr = LaunchConfiguration("deos_root").perform(context).strip() or "/deos"
+    enable_fusion = LaunchConfiguration("enable_licam_fusion").perform(context).strip().lower() in (
+        "1", "true", "yes", "on"
+    )
+    T = build_deos_topics(dr)
+
+    actions = [
+        Node(
+            package="sick_scan_xd",
+            executable="sick_generic_caller",
+            name="sick_multiscan165",
+            parameters=[{
+                "hostname": "192.168.0.1",
+                "scanner_type": "sick_multiscan",
+                "frame_id": "laser",
+            }],
+            remappings=[
+                ("/cloud_unstructured_fullframe", T["sensors_lidar_cloud_unstructured_fullframe"]),
+            ],
+            output="screen",
+            respawn=True,
+            respawn_delay=2,
+        ),
+    ]
+
+    if enable_fusion:
+        licam_share = get_package_share_directory("licam_fusion")
+        deos_fusion_cfg = os.path.join(licam_share, "config", "deos_fusion_params.yaml")
+        actions.append(
+            ComposableNodeContainer(
+                name="deos_perception_container",
+                namespace="",
+                package="rclcpp_components",
+                executable="component_container_mt",
+                output="screen",
+                respawn=True,
+                respawn_delay=2,
+                composable_node_descriptions=[
+                    ComposableNode(
+                        package="licam_fusion",
+                        plugin="licam_fusion::FusionNode",
+                        name="licam_fusion_node",
+                        parameters=[
+                            deos_fusion_cfg,
+                            {"deos_root": dr},
+                        ],
+                        extra_arguments=[{"use_intra_process_comms": True}],
+                    ),
+                ],
+            )
+        )
+
+    return actions
 
 
 def generate_launch_description():
@@ -113,6 +176,25 @@ def generate_launch_description():
         description="Hailo AI HAT üzerindeki YOLOv8 segmentation HEF model dosyasının tam yolu",
     )
 
+    enable_licam_fusion_arg = DeclareLaunchArgument(
+        "enable_licam_fusion",
+        default_value="true",
+        description="C++ licam_fusion 3D LiDAR-Kamera füzyon bileşenini (deos_perception_container) başlat",
+    )
+
+    publish_sensor_tfs_arg = DeclareLaunchArgument(
+        "publish_sensor_tfs",
+        default_value="true",
+        description="base_link -> laser/cloud ve camera_color_frame statik TF ağacını yayınla",
+    )
+
+    sensor_tfs = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory("vehicle_bringup"), "launch", "sensorlocs.launch.py")
+        ),
+        condition=IfCondition(LaunchConfiguration("publish_sensor_tfs")),
+    )
+
     # Sensor Nodes
     camera_node = Node(
         package='camera',
@@ -150,19 +232,7 @@ def generate_launch_description():
         respawn_delay=2,
     )
     
-    lidar_node = Node(
-        package='sick_scan_xd',
-        executable='sick_generic_caller',
-        name='sick_multiscan165',
-        parameters=[{
-            'hostname': '192.168.0.1',
-            'scanner_type': 'sick_multiscan',
-            'frame_id': 'laser',
-        }],
-        output='screen',
-        respawn=True,
-        respawn_delay=2,
-    )
+    cpp_perception_and_lidar_stack = OpaqueFunction(function=_cpp_perception_and_lidar_from_deos)
     
     # Perception (algorithms)
     stereo_detector_node = Node(
@@ -348,7 +418,8 @@ def generate_launch_description():
     _bag_topics = [
         # GPS
         _T0["sensors_gps_fix"],
-        # Algı füzyonu (karar katmanı)
+        # Algı füzyonu (karar katmanı + 3D C++ nesne tespiti)
+        _T0["perception_detections_3d"],
         _T0["perception_fusion_emergency_stop"],
         _T0["perception_fusion_speed_cap"],
         _T0["perception_fusion_steering_override"],
@@ -400,11 +471,14 @@ def generate_launch_description():
         tunnel_mandatory_arg,
         stereo_model_path_arg,
         lane_model_path_arg,
-        # === SENSORS (Raw Data Acquisition) ===
-        camera_node,           # RGB frames: /camera/color/image_raw (30 Hz)
-        gps_node,              # GPS location: /gps/fix (5-10 Hz)
-        imu_node,              # Inertial data: /imu/data (100 Hz)
-        lidar_node,            # 3D scans: /scan_fullframe, /cloud_unstructured_fullframe (20 Hz)
+        enable_licam_fusion_arg,
+        publish_sensor_tfs_arg,
+        # === SENSORS & STATIC TFs ===
+        sensor_tfs,
+        camera_node,           # RGB frames: /deos/sensors/camera/color/image_raw (30 Hz)
+        gps_node,              # GPS location: /deos/sensors/gps/fix (5-10 Hz)
+        imu_node,              # Inertial data: /deos/sensors/imu/data (100 Hz)
+        cpp_perception_and_lidar_stack,  # SICK LiDAR + C++ deos_perception_container (licam_fusion)
         
         # === PERCEPTION ===
         stereo_detector_node,

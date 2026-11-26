@@ -80,6 +80,23 @@ else
     check_fail "main.launch.py bulunamadı — vehicle_bringup paketi eksik olabilir"
 fi
 
+# --- Middleware (DDS) ---
+log "INFO" "--- Middleware ---"
+
+if [ "${RMW_IMPLEMENTATION:-}" = "rmw_cyclonedds_cpp" ]; then
+    check_ok "RMW: rmw_cyclonedds_cpp (CYCLONEDDS_URI=${CYCLONEDDS_URI:-tanımsız})"
+else
+    check_warn "RMW: ${RMW_IMPLEMENTATION:-varsayılan (Fast DDS)} — CycloneDDS bekleniyordu"
+fi
+
+if [ "${DEOS_DDS_SHM:-0}" = "1" ]; then
+    if pgrep -x iox-roudi >/dev/null 2>&1; then
+        check_ok "iceoryx RouDi çalışıyor (shared memory aktif)"
+    else
+        check_warn "DEOS_DDS_SHM=1 ama iox-roudi çalışmıyor — UDP'ye düşüldü"
+    fi
+fi
+
 # --- Sistem Kaynakları ---
 log "INFO" "--- Sistem Kaynakları ---"
 

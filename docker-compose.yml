@@ -4,9 +4,16 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: epic_torvalds
+    image: deos:latest
     environment:
       - ROS_DOMAIN_ID=0
-      - ROS_LOCALHOST_ONLY=0
+      # Jazzy: ROS_LOCALHOST_ONLY yerine ROS_AUTOMATIC_DISCOVERY_RANGE (LOCALHOST | SUBNET)
+      - ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+      # Middleware: CycloneDDS. Fast DDS'e dönmek için rmw_fastrtps_cpp yazın.
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=file:///ros2_ws/config/dds/cyclonedds.xml
+      # 1 = iceoryx shared memory (iox-roudi deos_dds_env.sh tarafından başlatılır)
+      - DEOS_DDS_SHM=0
     volumes:
       - ./DEOS/deos_ws/src:/ros2_ws/src
       - ./bags:/ros2_ws/bags
@@ -14,6 +21,8 @@ services:
       - ./missions:/ros2_ws/missions                # GeoJSON görev dosyaları
       - ./logs:/ros2_ws/logs                        # Node log dosyaları (log_monitor_server.py ile izlenir)
       - ./ops/scripts:/ros2_ws/ops/scripts          # Ops scriptleri (camera_stream_server.py vb.)
+      - ./config:/ros2_ws/config                    # DDS (cyclonedds*.xml, roudi.toml) + colcon defaults
+      - ./.ccache:/ros2_ws/.ccache                  # C++ derleme önbelleği (rebuild hızlandırma)
     working_dir: /ros2_ws
     command: bash
     stdin_open: true
@@ -36,6 +45,8 @@ services:
   micro_ros_agent:
     image: microros/micro-ros-agent:jazzy
     container_name: deos_micro_ros_agent
+    # Not: micro-ROS agent içeride Fast DDS kullanır (RMW seçimi uygulanmaz).
+    # CycloneDDS node'larıyla standart RTPS/UDP üzerinden haberleşir.
     environment:
       - ROS_DOMAIN_ID=0
       - ROS_LOCALHOST_ONLY=0

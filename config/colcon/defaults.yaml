@@ -1,0 +1,19 @@
+# DEOS colcon varsayılanları (COLCON_DEFAULTS_FILE ile yüklenir, Dockerfile'da ayarlı)
+#
+# - Release + compile_commands.json (clangd / clang-tidy için)
+# - ccache: tekrar derlemeleri Pi'de dakikalardan saniyelere indirir
+#   (CCACHE_DIR=/ros2_ws/.ccache, compose ile host'a kalıcı mount)
+# - parallel-workers: 2 -> Pi 5'te PCL/Eigen derlerken OOM riskini azaltır
+#
+# Komut satırında --cmake-args verirseniz buradaki listeyi EZER (birleştirmez).
+build:
+  cmake-args:
+    - -DCMAKE_BUILD_TYPE=Release
+    - -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    - -DCMAKE_C_COMPILER_LAUNCHER=ccache
+    - -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+  parallel-workers: 2
+test:
+  parallel-workers: 2
+  event-handlers:
+    - console_direct+

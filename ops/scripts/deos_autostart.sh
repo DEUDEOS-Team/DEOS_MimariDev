@@ -6,8 +6,11 @@ set -eo pipefail
 source /opt/ros/jazzy/setup.bash
 cd /ros2_ws
 
+# Middleware (CycloneDDS) + DEOS_DDS_SHM=1 ise iox-roudi
+source /ros2_ws/ops/scripts/deos_dds_env.sh
+
 if [ ! -f /ros2_ws/install/setup.bash ]; then
-    echo "[deos] install/ yok, colcon build yapılıyor..."
+    echo "[deos] install/ yok, colcon build yapılıyor (config/colcon/defaults.yaml)..."
     colcon build
 fi
 

@@ -6,3 +6,6 @@ DEOS/deos_ws/log/
 # Python Ön Bellek Dosyaları (İsteğe Bağlı ama Önerilir)
 __pycache__/
 *.pyc
+
+# C++ derleme önbelleği (ccache, compose ile mount edilir)
+.ccache/

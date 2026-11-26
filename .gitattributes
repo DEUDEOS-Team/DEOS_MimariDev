@@ -1,0 +1,2 @@
+# Shell scriptleri Linux'ta (Pi / container) çalışır: her zaman LF.
+*.sh text eol=lf
