@@ -1,0 +1,27 @@
+licam_fusion_node:
+  ros__parameters:
+    camera_info_topic: "/camera/color/camera_info"
+    bbox_topic: "/perception/stereo_detections"
+    lidar_topic: "/points_downsampled"
+    output_3d_bbox_topic: "/perception/detections_3d"
+    marker_topic: "/perception/detections_3d_markers"
+    lidar_frame_id: "cloud"
+    output_frame_id: ""
+    fixed_frame_id: ""
+    sync_queue_size: 15
+    max_sync_interval_sec: 0.05
+    detector_width: 0
+    detector_height: 0
+    use_rectified_image: true
+    one_shot_camera_info: false
+    min_points_per_bbox: 5
+    cluster_tolerance: 1.2
+    min_depth: 0.2
+    max_depth: 100.0
+    box_shrink: 0.9
+    bin_size: 0.1
+    occlusion_handling: true
+    filter_ground: false
+    max_camera_y: 1.8
+    class_prior_weight: 0.0
+    publish_markers: true

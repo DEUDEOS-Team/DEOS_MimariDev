@@ -1,0 +1,30 @@
+# DEOS araç üstü LiDAR-Kamera 3D füzyon parametreleri
+# topic adları `deos_root` üzerinden `deos::build_deos_topics("/deos")` ile otomatik çözülür:
+#   camera_info : /deos/sensors/camera/color/camera_info
+#   bbox_2d     : /deos/perception/stereo/detections_2d
+#   lidar       : /deos/sensors/lidar/cloud_unstructured_fullframe
+#   out_3d      : /deos/perception/detections_3d
+#   markers     : /deos/perception/detections_3d_markers
+licam_fusion_node:
+  ros__parameters:
+    deos_root: "/deos"
+    lidar_frame_id: "laser"
+    output_frame_id: "base_link"
+    fixed_frame_id: ""
+    sync_queue_size: 15
+    max_sync_interval_sec: 0.08
+    detector_width: 640
+    detector_height: 480
+    use_rectified_image: true
+    one_shot_camera_info: true
+    min_points_per_bbox: 4
+    cluster_tolerance: 0.8
+    min_depth: 0.3
+    max_depth: 35.0
+    box_shrink: 0.88
+    bin_size: 0.1
+    occlusion_handling: true
+    filter_ground: false
+    max_camera_y: 1.8
+    class_prior_weight: 0.30
+    publish_markers: true
